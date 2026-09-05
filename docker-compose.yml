@@ -53,7 +53,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       BASE_URL: https://camcam.smarbiz.sbs
     depends_on:
-      db:
+      api:
         condition: service_healthy
       redis:
         condition: service_started
