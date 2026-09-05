@@ -17,23 +17,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Python syntax
-        run: python -m py_compile backend/app.py
-      - name: Validate admin JavaScript syntax
+        run: python -m py_compile backend/app.py backend/archive_proxy.py backend/pet_app.py backend/pet_archive.py
+      - name: Validate web JavaScript syntax
         run: |
           python - <<'PY'
           import re
           from pathlib import Path
-          html = Path('web/admin.html').read_text()
-          match = re.search(r'<script>(.*)</script>', html, re.S)
-          if not match:
-              raise SystemExit('admin script not found')
-          Path('/tmp/admin.js').write_text(match.group(1))
+          for name in ['admin.html', 'pet.html', 'pet_camera.html']:
+              html = Path('web', name).read_text()
+              scripts = re.findall(r'<script>(.*?)</script>', html, re.S)
+              if not scripts:
+                  raise SystemExit(f'script not found in {name}')
+              Path('/tmp', name + '.js').write_text('\n'.join(scripts))
           PY
-          node --check /tmp/admin.js
+          node --check /tmp/admin.html.js
+          node --check /tmp/pet.html.js
+          node --check /tmp/pet_camera.html.js
       - name: Build and smoke-import application
         run: |
           docker build -t camcam-ci .
-          docker run --rm camcam-ci python -c "import app; assert any(getattr(r, 'path', '') == '/admin' for r in app.app.routes); assert any(getattr(r, 'path', '') == '/api/admin/overview' for r in app.app.routes); print('CamCam import smoke test OK')"
+          docker run --rm camcam-ci python -c "import app, pet_app, pet_archive; assert any(getattr(r, 'path', '') == '/admin' for r in app.app.routes); assert any(getattr(r, 'path', '') == '/api/admin/overview' for r in app.app.routes); assert any(getattr(r, 'path', '') == '/api/pet/devices' for r in pet_app.app.routes); assert any(getattr(r, 'path', '') == '/api/pet/devices/{device_id}/recordings' for r in pet_archive.app.routes); print('CamCam + Pet import smoke test OK')"
       - name: Validate Compose configuration
         run: |
           cp .env.example .env
@@ -140,6 +143,8 @@ jobs:
             docker compose pull db redis mediamtx caddy
             docker compose up -d --build --remove-orphans
             docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
+            docker compose exec -T pet curl -fsS http://127.0.0.1:8020/health
+            docker compose exec -T petarchive curl -fsS http://127.0.0.1:8030/health
             echo
             docker compose ps
             echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
