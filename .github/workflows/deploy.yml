@@ -82,6 +82,9 @@ jobs:
             fi
             cd "$APP_DIR"
 
+            PUBLIC_IP=$(curl -4fsS --max-time 10 https://api.ipify.org || true)
+            WEBRTC_HOST=${PUBLIC_IP:-camcam.smarbiz.sbs}
+
             if [ ! -f .env ]; then
               SECRET_KEY=$(openssl rand -hex 48)
               DB_PASSWORD=$(openssl rand -hex 24)
@@ -98,6 +101,7 @@ jobs:
             PRO_YEARLY_RIAL=59900000
             ADMIN_EMAILS=$ADMIN_EMAILS
             SECURE_COOKIES=true
+            WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST
             EOF
             else
               if [ -n "${ZIBAL_MERCHANT:-}" ]; then
@@ -106,6 +110,7 @@ jobs:
               if [ -n "${ADMIN_EMAILS:-}" ]; then
                 if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS" >> .env; fi
               fi
+              if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
 
             chmod 600 .env
@@ -114,6 +119,6 @@ jobs:
             docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
             echo
             docker compose ps
-            PUBLIC_IP=$(curl -4fsS --max-time 10 https://api.ipify.org || true)
             echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
+            echo "CAMCAM_WEBRTC_HOST=$WEBRTC_HOST"
             docker image prune -f >/dev/null 2>&1 || true
