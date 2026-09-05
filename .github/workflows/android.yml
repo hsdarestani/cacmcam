@@ -6,11 +6,13 @@ on:
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
+      - '.github/workflows/bazaar-release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
+      - '.github/workflows/bazaar-release.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,14 +39,15 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build unified APK
-        run: gradle -p android :app:assembleDebug --stacktrace
+      - name: Validate debug and release builds
+        run: gradle -p android :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace
 
-      - name: Stage APK
+      - name: Stage internal APK
         run: |
           mkdir -p dist
           cp android/app/build/outputs/apk/debug/app-debug.apk dist/CamCam.apk
-          sha256sum dist/CamCam.apk | tee dist/SHA256SUMS.txt
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/CamCam-release-unsigned.apk
+          sha256sum dist/CamCam.apk dist/CamCam-release-unsigned.apk | tee dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -52,11 +55,12 @@ jobs:
           name: CamCam-Android-APK
           path: |
             dist/CamCam.apk
+            dist/CamCam-release-unsigned.apk
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish installable APK release
+      - name: Publish installable internal APK release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,5 +71,5 @@ jobs:
           else
             gh release create "$TAG" dist/CamCam.apk dist/SHA256SUMS.txt \
               --title "CamCam Android build ${GITHUB_RUN_NUMBER}" \
-              --notes "One installable CamCam APK. On first launch choose Camera or Viewer mode; the role can be changed later from inside the app. Internal sideload build signed with the Android debug signing identity."
+              --notes "Internal sideload APK signed with the Android debug identity. For Cafe Bazaar use the dedicated signed Bazaar release workflow."
           fi
