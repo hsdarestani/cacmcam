@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -207,7 +208,7 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.2 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.3 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -224,6 +225,14 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return handleNavigation(Uri.parse(url));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (url != null && url.startsWith("https://" + APP_HOST)) {
+                    disableWebOrientationLock(view);
+                }
             }
 
             @Override
@@ -268,9 +277,20 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void disableWebOrientationLock(WebView view) {
+        String script = "(function(){"
+                + "try{"
+                + "if(typeof lockLandscape==='function'){lockLandscape=async function(){};}"
+                + "if(typeof unlockOrientation==='function'){unlockOrientation=function(){};}"
+                + "if(typeof goFullscreen==='function'){goFullscreen=async function(){var v=document.getElementById('archiveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){v.play().catch(function(){});}};}"
+                + "if(typeof fullscreenLive==='function'){fullscreenLive=async function(){var v=document.getElementById('liveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){}};}"
+                + "}catch(e){}"
+                + "})();";
+        view.evaluateJavascript(script, null);
+    }
+
     private void enterFullscreen(View view, WebChromeClient.CustomViewCallback callback) {
         if (fullscreenView != null) {
-            callback.onCustomViewHidden();
             return;
         }
 
@@ -297,9 +317,11 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         applyFullscreenUi();
 
-        // Fullscreen video always follows the physical landscape direction. This allows
-        // both left- and right-hand landscape without ending up upside-down or sideways.
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        // Do not force an immediate 90-degree rotation here. Some WebView/OEM builds
+        // interpret that transition as leaving HTML fullscreen. FULL_SENSOR keeps the
+        // custom view alive and follows the phone naturally when the user rotates it,
+        // including both left and right landscape orientations.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
     }
 
     private void applyFullscreenUi() {
@@ -400,6 +422,14 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == MEDIA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
             grantAllowedResources(pendingPermissionRequest);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (fullscreenView != null) {
+            fullscreenView.post(this::applyFullscreenUi);
         }
     }
 
