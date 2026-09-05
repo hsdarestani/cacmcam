@@ -1,10 +1,14 @@
-# CamCam Android apps
+# CamCam Android app
 
-This project builds two installable APK flavors from the same hardened WebView shell:
+CamCam now builds one installable APK: `CamCam.apk` (`com.camcam`).
 
-- `CamCam-Camera.apk` (`com.camcam.camera`) opens `/camera`, requests camera/microphone only when the CamCam origin asks for them, keeps the screen awake while used as a camera, blocks cleartext HTTP and rejects SSL errors.
-- `CamCam-Viewer.apk` (`com.camcam.viewer`) opens the normal CamCam dashboard and never grants camera/microphone WebView permissions.
+On first launch the user chooses one of two roles inside the same app:
 
-Both apps only keep CamCam and the Zibal payment host inside the app. Other links open through Android's normal external-app routing. Third-party cookies, file access, content access, mixed content and WebView debugging are disabled.
+- **Camera** — opens `/camera`, requests camera/microphone only when the CamCam HTTPS origin asks for them, and keeps the screen awake while publishing.
+- **Viewer** — opens the normal CamCam dashboard and refuses camera/microphone WebView access.
 
-The GitHub workflow builds signed debug APKs for internal sideloading and publishes them as workflow artifacts and release assets. A production store build should use a private release signing key stored only in GitHub Actions secrets.
+The selected role is remembered. From the root screen, pressing Android Back returns to the role chooser so the same installed app can switch between Camera and Viewer later.
+
+Security hardening remains shared: HTTPS-only navigation, SSL errors fail closed, no mixed content, no file/content access, no third-party cookies, and WebView debugging is disabled. Only CamCam and the Zibal payment host stay inside the WebView; unrelated links are routed to Android externally.
+
+The GitHub workflow builds the unified internal sideload APK and publishes it as an artifact and release asset. A production store build should use a private release signing key stored only in GitHub Actions secrets.
