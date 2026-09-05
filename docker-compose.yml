@@ -49,6 +49,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${WEBRTC_ADDITIONAL_HOSTS:-camcam.smarbiz.sbs}
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
       - recordings:/recordings
