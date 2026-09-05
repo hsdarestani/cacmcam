@@ -136,7 +136,6 @@ jobs:
                 if grep -q '^ZIBAL_MERCHANT=' .env; then sed -i "s|^ZIBAL_MERCHANT=.*|ZIBAL_MERCHANT=$ZIBAL_MERCHANT|" .env; else printf '\nZIBAL_MERCHANT=%s\n' "$ZIBAL_MERCHANT" >> .env; fi
               fi
               if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS_EFFECTIVE" >> .env; fi
-              fi
               if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
 
@@ -149,16 +148,14 @@ jobs:
             docker compose exec -T pet curl -fsS http://127.0.0.1:8020/health
             docker compose exec -T petarchive curl -fsS http://127.0.0.1:8030/health
 
-            # Verify the actual Caddy routes, bypassing DNS/CDN. This catches a successful
-            # container deploy that still serves the legacy shell or a broken camera entry.
+            # Verify the real Caddy routes while bypassing DNS/CDN.
             LOCAL_PET=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/pet)
             printf '%s' "$LOCAL_PET" | grep -Fq 'CamCam Pet'
             printf '%s' "$LOCAL_PET" | grep -Fq 'وقتی خونه نیستی'
             LOCAL_CAMERA=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/camera)
             printf '%s' "$LOCAL_CAMERA" | grep -Fq 'این گوشی را کنار پت بگذار'
 
-            # /pet is intentionally a new uncached public URL. Make deployment fail if
-            # the public edge still cannot expose the Pet experience.
+            # /pet is a fresh public URL; fail if the public edge cannot expose it.
             REV=$(date +%s)
             PUBLIC_PET=$(curl -fsS --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
             printf '%s' "$PUBLIC_PET" | grep -Fq 'CamCam Pet'
