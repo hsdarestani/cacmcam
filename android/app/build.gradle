@@ -10,18 +10,44 @@ android {
         applicationId 'com.camcam'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '1.2.0'
+    }
+
+    def bazaarKeystorePath = System.getenv('BAZAAR_KEYSTORE_PATH')
+    def bazaarKeystorePassword = System.getenv('BAZAAR_KEYSTORE_PASSWORD')
+    def bazaarKeyAlias = System.getenv('BAZAAR_KEY_ALIAS')
+    def bazaarKeyPassword = System.getenv('BAZAAR_KEY_PASSWORD')
+
+    signingConfigs {
+        bazaar {
+            if (bazaarKeystorePath && bazaarKeystorePassword && bazaarKeyAlias && bazaarKeyPassword) {
+                storeFile file(bazaarKeystorePath)
+                storePassword bazaarKeystorePassword
+                keyAlias bazaarKeyAlias
+                keyPassword bazaarKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
     }
 
     buildTypes {
         debug {
             minifyEnabled false
         }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (bazaarKeystorePath && bazaarKeystorePassword && bazaarKeyAlias && bazaarKeyPassword) {
+                signingConfig signingConfigs.bazaar
+            }
+        }
     }
 
     lint {
         abortOnError true
-        checkReleaseBuilds false
+        checkReleaseBuilds true
     }
 }
