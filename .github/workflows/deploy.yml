@@ -3,10 +3,12 @@ name: Validate and Deploy CamCam
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: camcam-production
+  group: camcam-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -16,6 +18,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Python syntax
         run: python -m py_compile backend/app.py
+      - name: Validate admin JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path('web/admin.html').read_text()
+          match = re.search(r'<script>(.*)</script>', html, re.S)
+          if not match:
+              raise SystemExit('admin script not found')
+          Path('/tmp/admin.js').write_text(match.group(1))
+          PY
+          node --check /tmp/admin.js
+      - name: Build and smoke-import application
+        run: |
+          docker build -t camcam-ci .
+          docker run --rm camcam-ci python -c "import app; assert any(getattr(r, 'path', '') == '/admin' for r in app.app.routes); assert any(getattr(r, 'path', '') == '/api/admin/overview' for r in app.app.routes); print('CamCam import smoke test OK')"
       - name: Validate Compose configuration
         run: |
           cp .env.example .env
@@ -30,6 +48,7 @@ jobs:
           fi
 
   deploy:
+    if: github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
     steps:
