@@ -7,26 +7,39 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
-    # Serve the viewer shell through the archive gateway so archive links stay
-    # in the same tab/WebView instead of opening a popup that Android blocks.
+    # CamCam Pet is now the primary viewer and camera experience.
     handle / {
-        reverse_proxy archive:8010
+        reverse_proxy pet:8020
     }
 
-    # Camera shell is also passed through the gateway, which injects a safe
-    # H264 preference for future recordings while keeping the original page.
     handle /camera {
-        reverse_proxy archive:8010
+        reverse_proxy pet:8020
     }
 
-    # Only the recordings index is overridden. Ownership is still validated by
-    # the main API and media bytes are proxied from MediaMTX's private playback server.
-    @recordings path_regexp recording_list ^/api/devices/[^/]+/recordings$
-    handle @recordings {
-        reverse_proxy archive:8010
+    # Shared/owner-aware archive list must be matched before the generic Pet API.
+    @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
+    handle @pet_recordings {
+        reverse_proxy petarchive:8030
     }
 
+    handle /api/pet/* {
+        reverse_proxy pet:8020
+    }
+
+    handle /pet-archive/* {
+        reverse_proxy petarchive:8030
+    }
+
+    # Event highlight links use the historical /archive path; rewrite them to the
+    # Pet archive gateway so family shares are authorized too.
     handle /archive/* {
+        uri replace /archive /pet-archive
+        reverse_proxy petarchive:8030
+    }
+
+    # Keep the legacy recording index available for older cached clients.
+    @legacy_recordings path_regexp legacy_recording_list ^/api/devices/[^/]+/recordings$
+    handle @legacy_recordings {
         reverse_proxy archive:8010
     }
 
