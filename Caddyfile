@@ -7,33 +7,34 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
-    # CamCam Pet primary viewer. /pet is intentionally a fresh canonical path
-    # so a stale CDN object for the historical '/' URL cannot mask the redesign.
-    # Use a literal path handle instead of a named matcher so Caddy can order it
-    # ahead of the generic fallback deterministically.
+    # Serve the product HTML entrypoints directly from the repository checkout.
+    # This removes ambiguity between the legacy API shell, Pet service routing,
+    # and CDN cache state. Dynamic APIs and media remain on their own services.
     handle /pet* {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
-        rewrite * /
-        reverse_proxy pet:8020
+        root * /srv/camcam-web
+        rewrite * /pet.html
+        file_server
     }
 
     handle / {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
-        reverse_proxy pet:8020
+        root * /srv/camcam-web
+        rewrite * /pet.html
+        file_server
     }
 
-    # Serve the camera runtime directly. The previous iframe shell conflicted
-    # with frame-ancestors 'none', leaving camera mode blank and stopping publish.
     handle /camera {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
-        rewrite * /static/pet_camera.html
-        reverse_proxy api:8000
+        root * /srv/camcam-web
+        rewrite * /pet_camera.html
+        file_server
     }
 
     # Shared/owner-aware archive list and background talk wake signaling are
