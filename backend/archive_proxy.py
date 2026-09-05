@@ -65,6 +65,18 @@ def patched_index() -> str:
         '<a class="btn small" href="${esc(r.url)}" target="_blank">پخش</a>',
         '<a class="btn small" href="${esc(r.url)}">پخش</a>',
     )
+    source = source.replace(
+        '<span id="streamNote" class="stream-note">در حال آماده‌سازی تصویر…</span></div>',
+        '<span id="streamNote" class="stream-note">در حال آماده‌سازی تصویر…</span><button class="btn small" style="position:absolute;right:12px;bottom:12px;z-index:3;background:rgba(255,253,248,.94)" onclick="fullscreenLive()">⛶ تمام‌صفحه</button></div>',
+    )
+    source = source.replace(
+        'function closeDetail(hide=true){',
+        "async function fullscreenLive(){const v=$('liveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen()}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen()}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen()}try{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape')}catch(_e){}v.play().catch(()=>{})}catch(_e){toast('تمام‌صفحه روی این دستگاه در دسترس نیست.')}}\nfunction closeDetail(hide=true){",
+    )
+    source = source.replace(
+        "$('modalBack').addEventListener('click',e=>{if(e.target===$('modalBack'))closeModal()});",
+        "document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){try{if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock()}catch(_e){}}});$('modalBack').addEventListener('click',e=>{if(e.target===$('modalBack'))closeModal()});",
+    )
     return source
 
 
