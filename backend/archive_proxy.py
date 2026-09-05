@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -62,9 +61,6 @@ async def watch_token(request: Request, device_id: str) -> str:
 
 def patched_index() -> str:
     source = (WEB / "index.html").read_text(encoding="utf-8")
-    # Android WebView intentionally disables popup windows. Archive links used
-    # target=_blank, so tapping "play" looked like a no-op. Keep playback in
-    # the current WebView/tab instead.
     source = source.replace(
         '<a class="btn small" href="${esc(r.url)}" target="_blank">پخش</a>',
         '<a class="btn small" href="${esc(r.url)}">پخش</a>',
@@ -77,9 +73,6 @@ def patched_camera() -> str:
     patch = r"""
 <script>
 (()=>{
-  // MediaMTX records fMP4 with H264/VP9/AV1 but not VP8. Chrome often puts
-  // VP8 first in its WebRTC offer, so prefer H264 when the device can encode
-  // it. This keeps new archive segments broadly playable without transcoding.
   const originalCreateOffer = RTCPeerConnection.prototype.createOffer;
   RTCPeerConnection.prototype.createOffer = function(...args){
     try{
@@ -172,15 +165,29 @@ async def archive_view(device_id: str, request: Request, start: str, duration: f
     media_url = f"/archive/{device_id}/media?{query}"
     page = f"""<!doctype html>
 <html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0d5f5b"><title>CamCam — آرشیو</title><style>
-*{{box-sizing:border-box}}body{{margin:0;background:#f6f0e6;color:#173c3a;font-family:Tahoma,Arial,sans-serif;min-height:100vh}}.wrap{{max-width:980px;margin:auto;padding:18px}}.top{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}}button{{font:inherit;border:1px solid #d9d1c3;background:#fffdf8;color:#173c3a;padding:10px 15px;border-radius:13px;font-weight:700}}.card{{background:#fffaf2;border:1px solid #d9d1c3;border-radius:22px;padding:14px;box-shadow:0 12px 35px rgba(30,67,63,.10)}}video{{display:block;width:100%;max-height:75vh;background:#102b2a;border-radius:16px}}small{{color:#6b7e79}}.note{{margin-top:10px;color:#6b7e79;font-size:13px;line-height:1.8}}
-</style></head><body><div class="wrap"><div class="top"><div><b>آرشیو دوربین</b><br><small>{safe_start}</small></div><button onclick="history.back()">بازگشت</button></div><div class="card"><video controls autoplay playsinline preload="metadata" src="{html.escape(media_url)}"></video><div class="note">این نسخه هنگام پخش به MP4 استاندارد تبدیل می‌شود تا روی مرورگر و گوشی سازگارتر باشد.</div></div></div></body></html>"""
+*{{box-sizing:border-box}}html,body{{margin:0;background:#f6f0e6;color:#173c3a;font-family:Tahoma,Arial,sans-serif;min-height:100%;}}body{{min-height:100vh}}.wrap{{max-width:980px;margin:auto;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}}.top{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}}button{{font:inherit;border:1px solid #d9d1c3;background:#fffdf8;color:#173c3a;padding:10px 15px;border-radius:13px;font-weight:700;cursor:pointer}}.card{{background:#fffaf2;border:1px solid #d9d1c3;border-radius:22px;padding:14px;box-shadow:0 12px 35px rgba(30,67,63,.10)}}.player{{position:relative;background:#102b2a;border-radius:16px;overflow:hidden}}video{{display:block;width:100%;max-height:75vh;background:#000;object-fit:contain}}.actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}}.fullscreen{{background:#0d6b66;border-color:#0d6b66;color:white}}small{{color:#6b7e79}}.note{{margin-top:10px;color:#6b7e79;font-size:13px;line-height:1.8}}video:fullscreen{{width:100vw;height:100vh;max-height:none;object-fit:contain;background:#000}}video:-webkit-full-screen{{width:100vw;height:100vh;max-height:none;object-fit:contain;background:#000}}@media(orientation:landscape) and (max-height:600px){{.wrap{{padding:8px}}.top,.note{{display:none}}.card{{padding:0;border:0;border-radius:0;background:#000}}.player,video{{border-radius:0;max-height:100vh}}.actions{{position:fixed;z-index:5;right:10px;bottom:10px;margin:0;opacity:.92}}}}
+</style></head><body><div class="wrap"><div class="top"><div><b>آرشیو دوربین</b><br><small>{safe_start}</small></div><button onclick="history.back()">بازگشت</button></div><div class="card"><div class="player"><video id="archiveVideo" controls autoplay playsinline preload="metadata" src="{html.escape(media_url)}"></video></div><div class="actions"><button class="fullscreen" onclick="goFullscreen()">⛶ تمام‌صفحه</button><button onclick="history.back()">بازگشت</button></div><div class="note">برای دیدن راحت‌تر، تمام‌صفحه را بزن. در اپ اندروید، ویدئو در حالت تمام‌صفحه با چرخاندن گوشی به جهت درست Landscape می‌رود.</div></div></div><script>
+const video=document.getElementById('archiveVideo');
+async function lockLandscape(){{try{{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape')}}catch(_e){{}}}}
+function unlockOrientation(){{try{{if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock()}}catch(_e){{}}}}
+async function goFullscreen(){{
+  try{{
+    if(video.requestFullscreen){{await video.requestFullscreen();}}
+    else if(video.webkitRequestFullscreen){{video.webkitRequestFullscreen();}}
+    else if(video.webkitEnterFullscreen){{video.webkitEnterFullscreen();}}
+    await lockLandscape();
+    video.play().catch(()=>{{}});
+  }}catch(_e){{video.play().catch(()=>{{}});}}
+}}
+document.addEventListener('fullscreenchange',()=>{{if(document.fullscreenElement)lockLandscape();else unlockOrientation();}});
+document.addEventListener('webkitfullscreenchange',()=>{{if(document.webkitFullscreenElement)lockLandscape();else unlockOrientation();}});
+video.addEventListener('dblclick',goFullscreen);
+</script></body></html>"""
     return HTMLResponse(page, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/archive/{device_id}/media")
 async def archive_media(device_id: str, request: Request, start: str, duration: float):
-    # Ownership is checked twice intentionally: once on the view page and again
-    # on the actual media request, so copying a media URL never bypasses access control.
     await authorized_recording_rows(request, device_id)
     token = await watch_token(request, device_id)
     duration = max(0.1, min(float(duration), 3600.0))
