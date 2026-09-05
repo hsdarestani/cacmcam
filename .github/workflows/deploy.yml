@@ -44,15 +44,33 @@ jobs:
           password: ${{ secrets.PASS }}
           port: ${{ secrets.PORT || 22 }}
           envs: ZIBAL_MERCHANT,ADMIN_EMAILS
-          script_stop: true
+          command_timeout: 20m
           script: |
             set -eu
             APP_DIR=/opt/camcam
             REPO=https://github.com/hsdarestani/cacmcam.git
 
-            command -v docker >/dev/null 2>&1 || { echo 'Docker is required on the server'; exit 1; }
-            docker compose version >/dev/null 2>&1 || { echo 'Docker Compose v2 is required'; exit 1; }
-            command -v git >/dev/null 2>&1 || { echo 'git is required on the server'; exit 1; }
+            if ! command -v docker >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y docker.io git curl openssl ca-certificates
+                apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin || true
+                systemctl enable --now docker || service docker start
+              else
+                echo 'Fresh server detected, but automatic bootstrap currently supports Debian/Ubuntu only'
+                exit 1
+              fi
+            fi
+
+            if ! command -v git >/dev/null 2>&1; then
+              apt-get update && apt-get install -y git
+            fi
+
+            if ! docker compose version >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin
+            fi
 
             if [ ! -d "$APP_DIR/.git" ]; then
               mkdir -p "$APP_DIR"
