@@ -142,6 +142,10 @@ jobs:
             chmod 600 .env
             docker compose pull db redis mediamtx caddy
             docker compose up -d --build --remove-orphans
+            # Caddy is bind-mounting Caddyfile; Compose does not necessarily recreate
+            # the container when only that file's contents change. Reload explicitly so
+            # routing changes (notably the Pet landing/app) become live on every deploy.
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || docker compose restart caddy
             docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
             docker compose exec -T pet curl -fsS http://127.0.0.1:8020/health
             docker compose exec -T petarchive curl -fsS http://127.0.0.1:8030/health
