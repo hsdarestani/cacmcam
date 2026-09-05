@@ -7,31 +7,31 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
-    # HTML entry points must never be edge/browser cached while the product UI
-    # is being served dynamically. /pet is also a fresh canonical path that
-    # bypasses any previously cached legacy response for '/'.
-    @html_entries path / /pet /pet/ /camera
-    header @html_entries Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-    header @html_entries Pragma "no-cache"
-    header @html_entries Expires "0"
-
-    # CamCam Pet primary viewer. Keep both '/' and '/pet' available; Android
-    # intentionally uses /pet so stale edge caches on the historical root can
-    # never send the legacy dashboard to the app.
-    handle / {
-        reverse_proxy pet:8020
-    }
-
-    @pet_entry path /pet /pet/
-    handle @pet_entry {
+    # CamCam Pet primary viewer. /pet is intentionally a fresh canonical path
+    # so a stale CDN object for the historical '/' URL cannot mask the redesign.
+    # Use a literal path handle instead of a named matcher so Caddy can order it
+    # ahead of the generic fallback deterministically.
+    handle /pet* {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Pragma "no-cache"
+        header Expires "0"
         rewrite * /
         reverse_proxy pet:8020
     }
 
-    # Serve the proven camera runtime directly. The previous iframe shell was
-    # incompatible with our own CSP (frame-ancestors 'none') and could leave
-    # the camera page blank, which in turn stopped WHIP publishing.
+    handle / {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Pragma "no-cache"
+        header Expires "0"
+        reverse_proxy pet:8020
+    }
+
+    # Serve the camera runtime directly. The previous iframe shell conflicted
+    # with frame-ancestors 'none', leaving camera mode blank and stopping publish.
     handle /camera {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Pragma "no-cache"
+        header Expires "0"
         rewrite * /static/pet_camera.html
         reverse_proxy api:8000
     }
