@@ -7,6 +7,29 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
+    # Serve the viewer shell through the archive gateway so archive links stay
+    # in the same tab/WebView instead of opening a popup that Android blocks.
+    handle / {
+        reverse_proxy archive:8010
+    }
+
+    # Camera shell is also passed through the gateway, which injects a safe
+    # H264 preference for future recordings while keeping the original page.
+    handle /camera {
+        reverse_proxy archive:8010
+    }
+
+    # Only the recordings index is overridden. Ownership is still validated by
+    # the main API and media bytes are proxied from MediaMTX's private playback server.
+    @recordings path_regexp recording_list ^/api/devices/[^/]+/recordings$
+    handle @recordings {
+        reverse_proxy archive:8010
+    }
+
+    handle /archive/* {
+        reverse_proxy archive:8010
+    }
+
     handle_path /webrtc/* {
         reverse_proxy mediamtx:8889
     }
