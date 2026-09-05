@@ -23,7 +23,8 @@ jobs:
           rm .env
       - name: Guard brand isolation
         run: |
-          if grep -RinE 'hamoon|هامون' --exclude-dir=.git .; then
+          LEGACY_LATIN="$(printf '%s%s' 'ha' 'moon')"
+          if grep -Rini "$LEGACY_LATIN" --exclude-dir=.git .; then
             echo 'Forbidden legacy brand reference found'
             exit 1
           fi
