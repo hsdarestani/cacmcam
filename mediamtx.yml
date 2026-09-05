@@ -8,9 +8,7 @@ hls: false
 srt: false
 moq: false
 
-# Playback stays on the private Docker network. Browsers never talk to this
-# listener directly; backend/archive_proxy.py authenticates the CamCam user,
-# obtains a short-lived watch token, then proxies standard MP4 output.
+# Playback is private inside Docker; authenticated gateways proxy MP4 to users.
 playback: true
 playbackAddress: :9996
 playbackEncryption: false
@@ -18,7 +16,7 @@ playbackAllowOrigins:
   - https://camcam.smarbiz.sbs
 
 authMethod: http
-authHTTPAddress: http://api:8000/internal/mediamtx/auth
+authHTTPAddress: http://pet:8020/internal/mediamtx/auth
 authHTTPExclude: []
 
 webrtc: true
@@ -34,11 +32,18 @@ webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
 
 paths:
-  all_others:
+  "~^cam/.+$":
     source: publisher
     record: true
     recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
     recordFormat: fmp4
     recordPartDuration: 1s
-    recordSegmentDuration: 10m
+    # One-minute segments make new archive entries visible quickly while keeping
+    # continuous recording, so event highlights can include seconds before motion.
+    recordSegmentDuration: 1m
     recordDeleteAfter: 31d
+
+  "~^talk/.+$":
+    source: publisher
+    # Two-way pet talk is live-only and is deliberately never archived.
+    record: false
