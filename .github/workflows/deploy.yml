@@ -68,6 +68,12 @@ jobs:
             set -eu
             APP_DIR=/opt/camcam
             REPO=https://github.com/hsdarestani/cacmcam.git
+            OWNER_ADMIN_EMAIL=hsdf7rb@gmail.com
+            if [ -n "${ADMIN_EMAILS:-}" ]; then
+              ADMIN_EMAILS_EFFECTIVE="$ADMIN_EMAILS,$OWNER_ADMIN_EMAIL"
+            else
+              ADMIN_EMAILS_EFFECTIVE="$OWNER_ADMIN_EMAIL"
+            fi
 
             if ! command -v docker >/dev/null 2>&1; then
               if command -v apt-get >/dev/null 2>&1; then
@@ -118,7 +124,7 @@ jobs:
             STARTER_YEARLY_RIAL=29900000
             PRO_MONTHLY_RIAL=5990000
             PRO_YEARLY_RIAL=59900000
-            ADMIN_EMAILS=$ADMIN_EMAILS
+            ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE
             SECURE_COOKIES=true
             WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST
             EOF
@@ -126,9 +132,7 @@ jobs:
               if [ -n "${ZIBAL_MERCHANT:-}" ]; then
                 if grep -q '^ZIBAL_MERCHANT=' .env; then sed -i "s|^ZIBAL_MERCHANT=.*|ZIBAL_MERCHANT=$ZIBAL_MERCHANT|" .env; else printf '\nZIBAL_MERCHANT=%s\n' "$ZIBAL_MERCHANT" >> .env; fi
               fi
-              if [ -n "${ADMIN_EMAILS:-}" ]; then
-                if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS" >> .env; fi
-              fi
+              if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS_EFFECTIVE" >> .env; fi
               if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
 
@@ -140,4 +144,5 @@ jobs:
             docker compose ps
             echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
             echo "CAMCAM_WEBRTC_HOST=$WEBRTC_HOST"
+            echo "CAMCAM_OWNER_ADMIN=$OWNER_ADMIN_EMAIL"
             docker image prune -f >/dev/null 2>&1 || true
