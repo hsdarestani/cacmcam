@@ -8,6 +8,15 @@ hls: false
 srt: false
 moq: false
 
+# Playback stays on the private Docker network. Browsers never talk to this
+# listener directly; backend/archive_proxy.py authenticates the CamCam user,
+# obtains a short-lived watch token, then proxies standard MP4 output.
+playback: true
+playbackAddress: :9996
+playbackEncryption: false
+playbackAllowOrigins:
+  - https://camcam.smarbiz.sbs
+
 authMethod: http
 authHTTPAddress: http://api:8000/internal/mediamtx/auth
 authHTTPExclude: []
