@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Python syntax
-        run: python -m py_compile backend/app.py
+        run: python -m py_compile backend/app.py backend/archive_app.py
       - name: Validate admin JavaScript syntax
         run: |
           python - <<'PY'
@@ -33,7 +33,7 @@ jobs:
       - name: Build and smoke-import application
         run: |
           docker build -t camcam-ci .
-          docker run --rm camcam-ci python -c "import app; assert any(getattr(r, 'path', '') == '/admin' for r in app.app.routes); assert any(getattr(r, 'path', '') == '/api/admin/overview' for r in app.app.routes); print('CamCam import smoke test OK')"
+          docker run --rm camcam-ci python -c "import archive_app; assert any(getattr(r, 'path', '') == '/admin' for r in archive_app.app.routes); assert any(getattr(r, 'path', '') == '/api/admin/overview' for r in archive_app.app.routes); assert any(getattr(r, 'path', '') == '/api/devices/{device_id}/recordings/play' for r in archive_app.app.routes); print('CamCam archive import smoke test OK')"
       - name: Validate Compose configuration
         run: |
           cp .env.example .env
