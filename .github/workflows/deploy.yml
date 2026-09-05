@@ -17,7 +17,10 @@ jobs:
       - name: Validate Python syntax
         run: python -m py_compile backend/app.py
       - name: Validate Compose configuration
-        run: docker compose --env-file .env.example config >/dev/null
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
+          rm .env
       - name: Guard brand isolation
         run: |
           if grep -RinE 'hamoon|هامون' --exclude-dir=.git .; then
