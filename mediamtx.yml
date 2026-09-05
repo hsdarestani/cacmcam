@@ -8,6 +8,13 @@ hls: false
 srt: false
 moq: false
 
+# Playback stays inside the Docker network. The public app reaches it only
+# through the authenticated FastAPI archive proxy.
+playback: true
+playbackAddress: :9996
+playbackEncryption: false
+playbackAllowOrigins: []
+
 authMethod: http
 authHTTPAddress: http://api:8000/internal/mediamtx/auth
 authHTTPExclude: []
