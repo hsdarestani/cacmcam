@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import html
+import os
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import httpx
+import redis
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 PET_ORIGIN = 'http://pet:8020'
 PLAYBACK_ORIGIN = 'http://mediamtx:9996'
+REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+try:
+    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=30)
+except Exception:
+    redis_client = None
+
 app = FastAPI(title='CamCam Pet archive gateway', docs_url=None, redoc_url=None, openapi_url=None)
 
 
@@ -31,6 +40,19 @@ async def authorize(request: Request, device_id: str) -> None:
         raise HTTPException(403, 'Archive access denied')
 
 
+async def authorize_device(request: Request) -> str:
+    device_id = request.headers.get('x-device-id', '')
+    token = request.headers.get('x-device-token', '')
+    if not device_id or not token:
+        raise HTTPException(401, 'Device credentials required')
+    headers = {'X-Device-ID': device_id, 'X-Device-Token': token}
+    async with httpx.AsyncClient(timeout=6) as client:
+        response = await client.get(f'{PET_ORIGIN}/api/pet/device/settings', headers=headers)
+    if response.status_code >= 400:
+        raise HTTPException(401, 'Invalid device credentials')
+    return device_id
+
+
 async def token_for(request: Request, device_id: str) -> str:
     async with httpx.AsyncClient(timeout=6) as client:
         response = await client.post(f'{PET_ORIGIN}/api/pet/devices/{device_id}/watch-token', headers=cookie_header(request))
@@ -42,9 +64,39 @@ async def token_for(request: Request, device_id: str) -> str:
     return token
 
 
+def talk_key(device_id: str) -> str:
+    return f'pet:talkwake:{device_id}'
+
+
 @app.get('/health')
 def health():
     return {'ok': True, 'service': 'camcam-pet-archive'}
+
+
+@app.post('/api/pet/devices/{device_id}/talk-wake')
+async def talk_wake(device_id: str, request: Request):
+    await authorize(request, device_id)
+    if redis_client:
+        try:
+            redis_client.rpush(talk_key(device_id), '1')
+            redis_client.expire(talk_key(device_id), 120)
+        except Exception:
+            pass
+    return {'ok': True}
+
+
+@app.get('/api/pet/device/talk-wait')
+async def talk_wait(request: Request):
+    device_id = await authorize_device(request)
+    if not redis_client:
+        await asyncio.sleep(5)
+        return {'wake': False}
+    try:
+        result = await asyncio.to_thread(redis_client.blpop, talk_key(device_id), 25)
+        return {'wake': bool(result)}
+    except Exception:
+        await asyncio.sleep(3)
+        return {'wake': False}
 
 
 @app.get('/api/pet/devices/{device_id}/recordings')
