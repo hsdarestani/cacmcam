@@ -43,11 +43,35 @@ services:
       timeout: 5s
       retries: 10
 
+  pet:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: ["uvicorn", "pet_app:app", "--host", "0.0.0.0", "--port", "8020", "--proxy-headers", "--forwarded-allow-ips=*"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://camcam:${DB_PASSWORD}@db:5432/camcam
+      REDIS_URL: redis://redis:6379/0
+      BASE_URL: https://camcam.smarbiz.sbs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - recordings:/recordings
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
   mediamtx:
     image: bluenviron/mediamtx:1
     restart: unless-stopped
     depends_on:
       api:
+        condition: service_healthy
+      pet:
         condition: service_healthy
     environment:
       MTX_WEBRTCADDITIONALHOSTS: ${WEBRTC_ADDITIONAL_HOSTS:-camcam.smarbiz.sbs}
@@ -74,15 +98,35 @@ services:
       timeout: 5s
       retries: 10
 
+  petarchive:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: ["uvicorn", "pet_archive:app", "--host", "0.0.0.0", "--port", "8030", "--proxy-headers", "--forwarded-allow-ips=*"]
+    depends_on:
+      pet:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
+      pet:
+        condition: service_healthy
       mediamtx:
         condition: service_started
       archive:
+        condition: service_healthy
+      petarchive:
         condition: service_healthy
     ports:
       - "80:80"
