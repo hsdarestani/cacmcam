@@ -3,17 +3,18 @@ package com.camcam.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
@@ -41,6 +42,7 @@ public class MainActivity extends Activity {
     private static final String PREF_MODE = "mode";
     private static final String MODE_CAMERA = "camera";
     private static final String MODE_VIEWER = "viewer";
+    private static final int APP_BG = 0xFFF6F0E6;
 
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
@@ -49,12 +51,25 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        configureSystemBars();
+
         String savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MODE, null);
         if (MODE_CAMERA.equals(savedMode) || MODE_VIEWER.equals(savedMode)) {
             startMode(savedMode, false);
         } else {
             showRoleChooser();
         }
+    }
+
+    private void configureSystemBars() {
+        getWindow().setStatusBarColor(APP_BG);
+        getWindow().setNavigationBarColor(APP_BG);
+
+        int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
     private void showRoleChooser() {
@@ -65,9 +80,9 @@ public class MainActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER);
-        page.setPadding(dp(28), dp(36), dp(28), dp(36));
-        page.setBackgroundColor(Color.rgb(246, 240, 230));
+        page.setBackgroundColor(APP_BG);
         page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        applySystemBarInsets(page, dp(28), dp(36), dp(28), dp(36));
 
         TextView mark = new TextView(this);
         mark.setText("◇");
@@ -157,6 +172,8 @@ public class MainActivity extends Activity {
 
         destroyWebView();
         webView = new WebView(this);
+        webView.setBackgroundColor(APP_BG);
+        applySystemBarInsets(webView, 0, 0, 0, 0);
         setContentView(webView);
         configureWebView();
         webView.loadUrl(isCameraMode() ? CAMERA_URL : VIEWER_URL);
@@ -164,6 +181,39 @@ public class MainActivity extends Activity {
 
     private boolean isCameraMode() {
         return MODE_CAMERA.equals(currentMode);
+    }
+
+    private void applySystemBarInsets(View view, int baseLeft, int baseTop, int baseRight, int baseBottom) {
+        view.setOnApplyWindowInsetsListener((v, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.graphics.Insets bars = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+                );
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+
+            v.setPadding(
+                baseLeft + left,
+                baseTop + top,
+                baseRight + right,
+                baseBottom + bottom
+            );
+            return insets;
+        });
+        view.requestApplyInsets();
     }
 
     private void configureWebView() {
@@ -178,7 +228,7 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.1 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
