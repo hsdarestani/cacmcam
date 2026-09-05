@@ -16,9 +16,19 @@ camcam.smarbiz.sbs {
         reverse_proxy pet:8020
     }
 
-    # Shared/owner-aware archive list must be matched before the generic Pet API.
+    # Shared/owner-aware archive list and background talk wake signaling are
+    # matched before the generic Pet API.
     @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
     handle @pet_recordings {
+        reverse_proxy petarchive:8030
+    }
+
+    @pet_talk_wake path_regexp pet_talk_wake ^/api/pet/devices/[^/]+/talk-wake$
+    handle @pet_talk_wake {
+        reverse_proxy petarchive:8030
+    }
+
+    handle /api/pet/device/talk-wait {
         reverse_proxy petarchive:8030
     }
 
