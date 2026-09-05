@@ -4,6 +4,9 @@ camcam.smarbiz.sbs {
     @internal path /internal/*
     respond @internal 404
 
+    @api path /api/*
+    header @api Cache-Control "no-store, max-age=0"
+
     handle_path /webrtc/* {
         reverse_proxy mediamtx:8889
     }
@@ -13,9 +16,14 @@ camcam.smarbiz.sbs {
     }
 
     header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        -Server
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "same-origin"
+        Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(self)"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+        Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
     }
 }
