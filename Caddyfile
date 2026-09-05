@@ -7,13 +7,16 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
-    # CamCam Pet is now the primary viewer and camera experience.
+    # CamCam Pet is the primary viewer experience.
     handle / {
         reverse_proxy pet:8020
     }
 
+    # Camera mode keeps the proven camera runtime and applies the Pet redesign
+    # client-side so functionality and UI can evolve independently.
     handle /camera {
-        reverse_proxy pet:8020
+        rewrite * /static/pet-camera-shell.html
+        reverse_proxy api:8000
     }
 
     # Shared/owner-aware archive list and background talk wake signaling are
