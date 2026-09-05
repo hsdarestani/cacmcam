@@ -3,6 +3,7 @@ package com.camcam.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -11,6 +12,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -19,6 +21,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
@@ -30,6 +33,8 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,11 +75,9 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         getWindow().setStatusBarColor(APP_BG);
         getWindow().setNavigationBarColor(APP_BG);
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(true);
         }
-
         int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
@@ -87,9 +90,29 @@ public class MainActivity extends Activity {
         setContentView(content);
     }
 
+    private void resetLowPowerWindow() {
+        WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        getWindow().setAttributes(params);
+        if (isCameraMode()) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    private void stopCameraService() {
+        try {
+            stopService(new Intent(this, CameraKeepAliveService.class));
+        } catch (Exception ignored) {
+        }
+    }
+
     private void showRoleChooser() {
         currentMode = null;
+        stopCameraService();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        resetLowPowerWindow();
         destroyWebView();
 
         LinearLayout page = new LinearLayout(this);
@@ -100,10 +123,9 @@ public class MainActivity extends Activity {
         page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         TextView mark = new TextView(this);
-        mark.setText("◇");
+        mark.setText("🐾");
         mark.setGravity(Gravity.CENTER);
-        mark.setTextSize(38);
-        mark.setTextColor(Color.rgb(13, 107, 102));
+        mark.setTextSize(34);
         GradientDrawable markBg = new GradientDrawable();
         markBg.setColor(Color.rgb(227, 239, 235));
         markBg.setCornerRadius(dp(22));
@@ -113,7 +135,7 @@ public class MainActivity extends Activity {
         page.addView(mark, markLp);
 
         TextView title = new TextView(this);
-        title.setText("این گوشی قراره چیکار کنه؟");
+        title.setText("این گوشی برای پت چه کاری می‌کند؟");
         title.setTextColor(Color.rgb(23, 60, 58));
         title.setTextSize(24);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -121,18 +143,18 @@ public class MainActivity extends Activity {
         page.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("هر وقت خواستی می‌تونی نقش گوشی رو عوض کنی.");
+        subtitle.setText("یک اپ برای گوشی کنار پت و گوشی خودت؛ هر وقت خواستی نقش را عوض کن.");
         subtitle.setTextColor(Color.rgb(107, 126, 121));
         subtitle.setTextSize(14);
         subtitle.setGravity(Gravity.CENTER);
         subtitle.setPadding(0, dp(8), 0, dp(24));
         page.addView(subtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Button camera = roleButton("📷  این گوشی دوربین است", true);
+        Button camera = roleButton("📷  این گوشی کنار پت می‌ماند", true);
         camera.setOnClickListener(v -> startMode(MODE_CAMERA, true));
         page.addView(camera, roleButtonParams());
 
-        Button viewer = roleButton("👁  این گوشی برای مشاهده است", false);
+        Button viewer = roleButton("👁  با این گوشی پت را می‌بینم", false);
         viewer.setOnClickListener(v -> startMode(MODE_VIEWER, true));
         LinearLayout.LayoutParams viewerLp = roleButtonParams();
         viewerLp.topMargin = dp(12);
@@ -178,13 +200,13 @@ public class MainActivity extends Activity {
         if (persist) {
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MODE, mode).apply();
         }
-
         if (isCameraMode()) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } else {
+            stopCameraService();
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
-
+        resetLowPowerWindow();
         destroyWebView();
         webView = new WebView(this);
         configureWebView();
@@ -208,13 +230,13 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.3 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.3.0 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, false);
-
         WebView.setWebContentsDebuggingEnabled(false);
+        webView.addJavascriptInterface(new NativeBridge(), "CamCamNative");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -277,12 +299,72 @@ public class MainActivity extends Activity {
         });
     }
 
+    private class NativeBridge {
+        @JavascriptInterface
+        public void setCameraActive(boolean active) {
+            runOnUiThread(() -> {
+                if (!isCameraMode()) return;
+                Intent service = new Intent(MainActivity.this, CameraKeepAliveService.class);
+                try {
+                    if (active) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(service);
+                        } else {
+                            startService(service);
+                        }
+                    } else {
+                        stopService(service);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setLowPower(boolean enabled) {
+            runOnUiThread(() -> {
+                WindowManager.LayoutParams params = getWindow().getAttributes();
+                if (enabled) {
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    params.screenBrightness = 0.01f;
+                } else {
+                    if (isCameraMode()) {
+                        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    }
+                    params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                }
+                getWindow().setAttributes(params);
+            });
+        }
+
+        @JavascriptInterface
+        public String getBatteryInfo() {
+            try {
+                Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if (battery == null) return "{}";
+                int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+                int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                int tempTenths = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
+                boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL;
+                int percent = level >= 0 && scale > 0 ? Math.round(level * 100f / scale) : -1;
+                JSONObject result = new JSONObject();
+                if (percent >= 0) result.put("battery", percent);
+                result.put("charging", charging);
+                if (tempTenths != Integer.MIN_VALUE) result.put("temperature_c", tempTenths / 10.0);
+                return result.toString();
+            } catch (Exception ignored) {
+                return "{}";
+            }
+        }
+    }
+
     private void disableWebOrientationLock(WebView view) {
         String script = "(function(){"
                 + "try{"
                 + "if(typeof lockLandscape==='function'){lockLandscape=async function(){};}"
                 + "if(typeof unlockOrientation==='function'){unlockOrientation=function(){};}"
-                + "if(typeof goFullscreen==='function'){goFullscreen=async function(){var v=document.getElementById('archiveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){v.play().catch(function(){});}};}"
+                + "if(typeof goFullscreen==='function'){goFullscreen=async function(){var v=document.getElementById('archiveVideo')||document.getElementById('v');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){v.play().catch(function(){});}};}"
                 + "if(typeof fullscreenLive==='function'){fullscreenLive=async function(){var v=document.getElementById('liveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){}};}"
                 + "}catch(e){}"
                 + "})();";
@@ -290,37 +372,21 @@ public class MainActivity extends Activity {
     }
 
     private void enterFullscreen(View view, WebChromeClient.CustomViewCallback callback) {
-        if (fullscreenView != null) {
-            return;
-        }
-
+        if (fullscreenView != null) return;
         fullscreenView = view;
         fullscreenCallback = callback;
         normalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
         normalRequestedOrientation = getRequestedOrientation();
-
         if (fullscreenView.getParent() instanceof ViewGroup) {
             ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
         }
-
         FrameLayout content = findViewById(android.R.id.content);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        );
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         content.addView(fullscreenView, params);
         fullscreenView.setBackgroundColor(Color.BLACK);
-        if (webView != null) {
-            webView.setVisibility(View.GONE);
-        }
-
+        if (webView != null) webView.setVisibility(View.GONE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         applyFullscreenUi();
-
-        // Do not force an immediate 90-degree rotation here. Some WebView/OEM builds
-        // interpret that transition as leaving HTML fullscreen. FULL_SENSOR keeps the
-        // custom view alive and follows the phone naturally when the user rotates it,
-        // including both left and right landscape orientations.
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
     }
 
@@ -337,22 +403,14 @@ public class MainActivity extends Activity {
 
     private void exitFullscreen() {
         if (fullscreenView == null) return;
-
         if (fullscreenView.getParent() instanceof ViewGroup) {
             ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
         }
         fullscreenView = null;
-
-        if (webView != null) {
-            webView.setVisibility(View.VISIBLE);
-        }
-
+        if (webView != null) webView.setVisibility(View.VISIBLE);
         WebChromeClient.CustomViewCallback callback = fullscreenCallback;
         fullscreenCallback = null;
-        if (callback != null) {
-            callback.onCustomViewHidden();
-        }
-
+        if (callback != null) callback.onCustomViewHidden();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setRequestedOrientation(normalRequestedOrientation);
         configureSystemBars();
@@ -363,9 +421,11 @@ public class MainActivity extends Activity {
         if (uri == null) return true;
         String scheme = uri.getScheme();
         String host = uri.getHost();
-        if ("https".equalsIgnoreCase(scheme) && (APP_HOST.equalsIgnoreCase(host) || PAYMENT_HOST.equalsIgnoreCase(host))) {
+        if ("https".equalsIgnoreCase(scheme) && APP_HOST.equalsIgnoreCase(host)) {
             return false;
         }
+        // Keep the native bridge isolated to CamCam pages; payment/external pages
+        // open in the system browser instead of sharing this WebView process.
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (Exception ignored) {
@@ -375,22 +435,26 @@ public class MainActivity extends Activity {
 
     private void handleWebPermissionRequest(PermissionRequest request) {
         Uri origin = request.getOrigin();
-        if (!isCameraMode() || origin == null || !"https".equalsIgnoreCase(origin.getScheme()) || !APP_HOST.equalsIgnoreCase(origin.getHost())) {
+        if (origin == null || !"https".equalsIgnoreCase(origin.getScheme()) || !APP_HOST.equalsIgnoreCase(origin.getHost())) {
             request.deny();
             return;
         }
-
         pendingPermissionRequest = request;
         List<String> missing = new ArrayList<>();
         for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && isCameraMode()
+                    && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 missing.add(Manifest.permission.CAMERA);
             }
-            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource) && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)
+                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 missing.add(Manifest.permission.RECORD_AUDIO);
             }
         }
-
+        if (isCameraMode() && Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
         if (missing.isEmpty()) {
             grantAllowedResources(request);
         } else {
@@ -399,22 +463,21 @@ public class MainActivity extends Activity {
     }
 
     private void grantAllowedResources(PermissionRequest request) {
-        if (request == null || !isCameraMode()) return;
+        if (request == null) return;
         List<String> allowed = new ArrayList<>();
         for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && isCameraMode()
+                    && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 allowed.add(resource);
             }
-            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource) && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)
+                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 allowed.add(resource);
             }
         }
         pendingPermissionRequest = null;
-        if (allowed.isEmpty()) {
-            request.deny();
-        } else {
-            request.grant(allowed.toArray(new String[0]));
-        }
+        if (allowed.isEmpty()) request.deny();
+        else request.grant(allowed.toArray(new String[0]));
     }
 
     @Override
@@ -428,17 +491,13 @@ public class MainActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        if (fullscreenView != null) {
-            fullscreenView.post(this::applyFullscreenUi);
-        }
+        if (fullscreenView != null) fullscreenView.post(this::applyFullscreenUi);
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && fullscreenView != null) {
-            applyFullscreenUi();
-        }
+        if (hasFocus && fullscreenView != null) applyFullscreenUi();
     }
 
     @Override
@@ -455,9 +514,7 @@ public class MainActivity extends Activity {
     }
 
     private void destroyWebView() {
-        if (fullscreenView != null) {
-            exitFullscreen();
-        }
+        if (fullscreenView != null) exitFullscreen();
         if (pendingPermissionRequest != null) {
             pendingPermissionRequest.deny();
             pendingPermissionRequest = null;
@@ -466,6 +523,7 @@ public class MainActivity extends Activity {
             webView.stopLoading();
             webView.loadUrl("about:blank");
             webView.clearHistory();
+            webView.removeJavascriptInterface("CamCamNative");
             webView.removeAllViews();
             webView.destroy();
             webView = null;
@@ -479,6 +537,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyWebView();
+        stopCameraService();
         super.onDestroy();
     }
 }
