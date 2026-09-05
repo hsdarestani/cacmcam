@@ -111,5 +111,9 @@ jobs:
             chmod 600 .env
             docker compose pull db redis mediamtx caddy
             docker compose up -d --build --remove-orphans
+            docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
+            echo
             docker compose ps
+            PUBLIC_IP=$(curl -4fsS --max-time 10 https://api.ipify.org || true)
+            echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
             docker image prune -f >/dev/null 2>&1 || true
