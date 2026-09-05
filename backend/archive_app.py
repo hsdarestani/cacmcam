@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime
-from pathlib import Path
 from typing import AsyncIterator
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, HTTPException, Query
@@ -97,7 +97,6 @@ async def recordings(
         if not start or duration <= 0:
             continue
 
-        # Validate the timestamp before reflecting it back into a playback URL.
         try:
             created = datetime.fromisoformat(start.replace("Z", "+00:00"))
         except ValueError:
@@ -111,7 +110,7 @@ async def recordings(
                 "created_at": created,
                 "url": (
                     f"/api/devices/{device_id}/recordings/play"
-                    f"?start={httpx.QueryParams({'start': start})['start']}"
+                    f"?start={quote(start, safe='')}"
                     f"&duration={duration:.3f}"
                 ),
             }
@@ -155,9 +154,10 @@ async def recording_play(
         raise HTTPException(502, "Could not prepare recording") from exc
 
     if upstream.status_code >= 400:
+        status = upstream.status_code
         await upstream.aclose()
         await client.aclose()
-        if upstream.status_code == 404:
+        if status == 404:
             raise HTTPException(404, "Recording not found")
         raise HTTPException(502, "Could not prepare recording")
 
