@@ -42,6 +42,12 @@ public class MainActivity extends Activity {
     private static final String MODE_CAMERA = "camera";
     private static final String MODE_VIEWER = "viewer";
     private static final int APP_BG = 0xFFF6F0E6;
+    private static final String IN_APP_LINK_FIX_JS =
+        "(function(){" +
+        "function fix(){document.querySelectorAll('a[target=\\\"_blank\\\"]').forEach(function(a){a.removeAttribute('target');});}" +
+        "fix();" +
+        "if(!window.__camcamLinkObserver){window.__camcamLinkObserver=new MutationObserver(fix);window.__camcamLinkObserver.observe(document.documentElement,{childList:true,subtree:true});}" +
+        "})();";
 
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
@@ -65,9 +71,6 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(APP_BG);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Keep the app inside the system-bar safe area. Avoid custom inset listeners:
-            // some OEM WebView/Android combinations can crash during first layout when the
-            // decor is manually edge-to-edge and a WebView is attached at the same time.
             getWindow().setDecorFitsSystemWindows(true);
         }
 
@@ -79,8 +82,6 @@ public class MainActivity extends Activity {
     }
 
     private void setSafeContentView(View content) {
-        // Let Android own the system-bar insets. This is deliberately boring and robust.
-        // The theme/system bars are opaque and decorFitsSystemWindows is enabled on R+.
         content.setBackgroundColor(APP_BG);
         setContentView(content);
     }
@@ -206,7 +207,7 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.1 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.2 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -223,6 +224,15 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return handleNavigation(Uri.parse(url));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                Uri uri = url == null ? null : Uri.parse(url);
+                if (uri != null && "https".equalsIgnoreCase(uri.getScheme()) && APP_HOST.equalsIgnoreCase(uri.getHost())) {
+                    view.evaluateJavascript(IN_APP_LINK_FIX_JS, null);
+                }
             }
 
             @Override
