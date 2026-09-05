@@ -10,30 +10,8 @@ android {
         applicationId 'com.camcam'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0.0'
-    }
-
-    flavorDimensions 'mode'
-    productFlavors {
-        camera {
-            dimension 'mode'
-            applicationIdSuffix '.camera'
-            resValue 'string', 'app_name', 'CamCam Camera'
-            buildConfigField 'String', 'START_URL', '"https://camcam.smarbiz.sbs/camera"'
-            buildConfigField 'boolean', 'IS_CAMERA', 'true'
-        }
-        viewer {
-            dimension 'mode'
-            applicationIdSuffix '.viewer'
-            resValue 'string', 'app_name', 'CamCam Viewer'
-            buildConfigField 'String', 'START_URL', '"https://camcam.smarbiz.sbs/"'
-            buildConfigField 'boolean', 'IS_CAMERA', 'false'
-        }
-    }
-
-    buildFeatures {
-        buildConfig true
+        versionCode 2
+        versionName '1.1.0'
     }
 
     buildTypes {
