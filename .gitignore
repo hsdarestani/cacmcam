@@ -7,3 +7,7 @@ __pycache__/
 .venv/
 .DS_Store
 recordings/
+*.jks
+*.keystore
+android/key.properties
+android/app/release/
