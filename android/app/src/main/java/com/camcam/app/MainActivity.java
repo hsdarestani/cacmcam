@@ -3,17 +3,20 @@ package com.camcam.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
@@ -25,6 +28,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -41,6 +45,7 @@ public class MainActivity extends Activity {
     private static final String PREF_MODE = "mode";
     private static final String MODE_CAMERA = "camera";
     private static final String MODE_VIEWER = "viewer";
+    private static final int APP_BG = 0xFFF6F0E6;
 
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
@@ -49,12 +54,71 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        configureSystemBars();
         String savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MODE, null);
         if (MODE_CAMERA.equals(savedMode) || MODE_VIEWER.equals(savedMode)) {
             startMode(savedMode, false);
         } else {
             showRoleChooser();
         }
+    }
+
+    private void configureSystemBars() {
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                    | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(mask, mask);
+            }
+        } else {
+            int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            getWindow().getDecorView().setSystemUiVisibility(flags);
+        }
+    }
+
+    private void setSafeContentView(View content) {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(APP_BG);
+        root.addView(content, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+        });
+
+        setContentView(root);
+        root.requestApplyInsets();
     }
 
     private void showRoleChooser() {
@@ -66,7 +130,7 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER);
         page.setPadding(dp(28), dp(36), dp(28), dp(36));
-        page.setBackgroundColor(Color.rgb(246, 240, 230));
+        page.setBackgroundColor(APP_BG);
         page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         TextView mark = new TextView(this);
@@ -116,7 +180,7 @@ public class MainActivity extends Activity {
         hint.setPadding(dp(10), dp(20), dp(10), 0);
         page.addView(hint, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        setContentView(page);
+        setSafeContentView(page);
     }
 
     private Button roleButton(String text, boolean primary) {
@@ -157,7 +221,7 @@ public class MainActivity extends Activity {
 
         destroyWebView();
         webView = new WebView(this);
-        setContentView(webView);
+        setSafeContentView(webView);
         configureWebView();
         webView.loadUrl(isCameraMode() ? CAMERA_URL : VIEWER_URL);
     }
@@ -178,7 +242,7 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.1 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
