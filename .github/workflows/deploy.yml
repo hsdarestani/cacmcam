@@ -1,4 +1,4 @@
-name: Deploy CamCam
+name: Validate and Deploy CamCam
 
 on:
   push:
@@ -10,7 +10,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python syntax
+        run: python -m py_compile backend/app.py
+      - name: Validate Compose configuration
+        run: docker compose --env-file .env.example config >/dev/null
+      - name: Guard brand isolation
+        run: |
+          if grep -RinE 'hamoon|هامون' --exclude-dir=.git .; then
+            echo 'Forbidden legacy brand reference found'
+            exit 1
+          fi
+
   deploy:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
@@ -71,7 +87,7 @@ jobs:
             fi
 
             chmod 600 .env
-            docker compose pull --ignore-buildable
+            docker compose pull db redis mediamtx caddy
             docker compose up -d --build --remove-orphans
             docker compose ps
             docker image prune -f >/dev/null 2>&1 || true
