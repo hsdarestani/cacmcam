@@ -1,0 +1,77 @@
+name: Deploy CamCam
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: camcam-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          ZIBAL_MERCHANT: ${{ secrets.ZIBAL_MERCHANT }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER || 'root' }}
+          password: ${{ secrets.PASS }}
+          port: ${{ secrets.PORT || 22 }}
+          envs: ZIBAL_MERCHANT,ADMIN_EMAILS
+          script_stop: true
+          script: |
+            set -eu
+            APP_DIR=/opt/camcam
+            REPO=https://github.com/hsdarestani/cacmcam.git
+
+            command -v docker >/dev/null 2>&1 || { echo 'Docker is required on the server'; exit 1; }
+            docker compose version >/dev/null 2>&1 || { echo 'Docker Compose v2 is required'; exit 1; }
+            command -v git >/dev/null 2>&1 || { echo 'git is required on the server'; exit 1; }
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              mkdir -p "$APP_DIR"
+              git clone "$REPO" "$APP_DIR"
+            else
+              cd "$APP_DIR"
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+            cd "$APP_DIR"
+
+            if [ ! -f .env ]; then
+              SECRET_KEY=$(openssl rand -hex 48)
+              DB_PASSWORD=$(openssl rand -hex 24)
+              cat > .env <<EOF
+            APP_NAME=CamCam
+            BASE_URL=https://camcam.smarbiz.sbs
+            SECRET_KEY=$SECRET_KEY
+            DB_PASSWORD=$DB_PASSWORD
+            REDIS_URL=redis://redis:6379/0
+            ZIBAL_MERCHANT=$ZIBAL_MERCHANT
+            STARTER_MONTHLY_RIAL=2990000
+            STARTER_YEARLY_RIAL=29900000
+            PRO_MONTHLY_RIAL=5990000
+            PRO_YEARLY_RIAL=59900000
+            ADMIN_EMAILS=$ADMIN_EMAILS
+            SECURE_COOKIES=true
+            EOF
+            else
+              if [ -n "${ZIBAL_MERCHANT:-}" ]; then
+                if grep -q '^ZIBAL_MERCHANT=' .env; then sed -i "s|^ZIBAL_MERCHANT=.*|ZIBAL_MERCHANT=$ZIBAL_MERCHANT|" .env; else printf '\nZIBAL_MERCHANT=%s\n' "$ZIBAL_MERCHANT" >> .env; fi
+              fi
+              if [ -n "${ADMIN_EMAILS:-}" ]; then
+                if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS" >> .env; fi
+              fi
+            fi
+
+            chmod 600 .env
+            docker compose pull --ignore-buildable
+            docker compose up -d --build --remove-orphans
+            docker compose ps
+            docker image prune -f >/dev/null 2>&1 || true

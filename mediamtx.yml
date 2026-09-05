@@ -1,0 +1,33 @@
+logLevel: info
+api: false
+metrics: false
+pprof: false
+rtsp: false
+rtmp: false
+hls: false
+srt: false
+moq: false
+
+authMethod: http
+authHTTPAddress: http://api:8000/internal/mediamtx/auth
+authHTTPExclude: []
+
+webrtc: true
+webrtcAddress: :8889
+webrtcEncryption: false
+webrtcAllowOrigins:
+  - https://camcam.smarbiz.sbs
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts:
+  - camcam.smarbiz.sbs
+
+paths:
+  all_others:
+    source: publisher
+    record: true
+    recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 10m
+    recordDeleteAfter: 31d
