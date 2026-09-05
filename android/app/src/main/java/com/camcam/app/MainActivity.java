@@ -3,6 +3,7 @@ package com.camcam.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -25,6 +26,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -46,6 +48,10 @@ public class MainActivity extends Activity {
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
     private String currentMode;
+    private View fullscreenView;
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
+    private int normalSystemUiVisibility;
+    private int normalRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,9 +71,6 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(APP_BG);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Keep the app inside the system-bar safe area. Avoid custom inset listeners:
-            // some OEM WebView/Android combinations can crash during first layout when the
-            // decor is manually edge-to-edge and a WebView is attached at the same time.
             getWindow().setDecorFitsSystemWindows(true);
         }
 
@@ -79,8 +82,6 @@ public class MainActivity extends Activity {
     }
 
     private void setSafeContentView(View content) {
-        // Let Android own the system-bar insets. This is deliberately boring and robust.
-        // The theme/system bars are opaque and decorFitsSystemWindows is enabled on R+.
         content.setBackgroundColor(APP_BG);
         setContentView(content);
     }
@@ -206,7 +207,7 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.1 " + (isCameraMode() ? "Camera" : "Viewer"));
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.2.2 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -248,7 +249,92 @@ public class MainActivity extends Activity {
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 callback.invoke(origin, false, false);
             }
+
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                enterFullscreen(view, callback);
+            }
+
+            @Override
+            @SuppressWarnings("deprecation")
+            public void onShowCustomView(View view, int requestedOrientation, CustomViewCallback callback) {
+                enterFullscreen(view, callback);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                exitFullscreen();
+            }
         });
+    }
+
+    private void enterFullscreen(View view, WebChromeClient.CustomViewCallback callback) {
+        if (fullscreenView != null) {
+            callback.onCustomViewHidden();
+            return;
+        }
+
+        fullscreenView = view;
+        fullscreenCallback = callback;
+        normalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
+        normalRequestedOrientation = getRequestedOrientation();
+
+        if (fullscreenView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
+        }
+
+        FrameLayout content = findViewById(android.R.id.content);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        );
+        content.addView(fullscreenView, params);
+        fullscreenView.setBackgroundColor(Color.BLACK);
+        if (webView != null) {
+            webView.setVisibility(View.GONE);
+        }
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        applyFullscreenUi();
+
+        // Fullscreen video always follows the physical landscape direction. This allows
+        // both left- and right-hand landscape without ending up upside-down or sideways.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    }
+
+    private void applyFullscreenUi() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    private void exitFullscreen() {
+        if (fullscreenView == null) return;
+
+        if (fullscreenView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
+        }
+        fullscreenView = null;
+
+        if (webView != null) {
+            webView.setVisibility(View.VISIBLE);
+        }
+
+        WebChromeClient.CustomViewCallback callback = fullscreenCallback;
+        fullscreenCallback = null;
+        if (callback != null) {
+            callback.onCustomViewHidden();
+        }
+
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        setRequestedOrientation(normalRequestedOrientation);
+        configureSystemBars();
+        getWindow().getDecorView().setSystemUiVisibility(normalSystemUiVisibility);
     }
 
     private boolean handleNavigation(Uri uri) {
@@ -318,8 +404,18 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && fullscreenView != null) {
+            applyFullscreenUi();
+        }
+    }
+
+    @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
+        if (fullscreenView != null) {
+            exitFullscreen();
+        } else if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else if (currentMode != null) {
             showRoleChooser();
@@ -329,6 +425,9 @@ public class MainActivity extends Activity {
     }
 
     private void destroyWebView() {
+        if (fullscreenView != null) {
+            exitFullscreen();
+        }
         if (pendingPermissionRequest != null) {
             pendingPermissionRequest.deny();
             pendingPermissionRequest = null;
