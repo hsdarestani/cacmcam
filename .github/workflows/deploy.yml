@@ -136,7 +136,8 @@ jobs:
                 if grep -q '^ZIBAL_MERCHANT=' .env; then sed -i "s|^ZIBAL_MERCHANT=.*|ZIBAL_MERCHANT=$ZIBAL_MERCHANT|" .env; else printf '\nZIBAL_MERCHANT=%s\n' "$ZIBAL_MERCHANT" >> .env; fi
               fi
               if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS_EFFECTIVE" >> .env; fi
-              if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONALHOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
+              fi
+              if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
 
             chmod 600 .env
