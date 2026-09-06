@@ -35,7 +35,14 @@ def public_landing_alias():
 
 @app.get('/refresh')
 def refresh_browser_cache():
-    return FileResponse(WEB / 'reset.html', headers={**NO_CACHE, 'X-CamCam-Page': 'cache-repair-v2'})
+    return FileResponse(
+        WEB / 'reset.html',
+        headers={
+            **NO_CACHE,
+            'Clear-Site-Data': '"cache", "storage"',
+            'X-CamCam-Page': 'cache-repair-v3',
+        },
+    )
 
 
 @app.get('/pet')
