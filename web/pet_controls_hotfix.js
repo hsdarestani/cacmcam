@@ -41,7 +41,7 @@ try{
   };
   const oldCmd=cmd;
   cmd=async function(type,value,quiet=false){setNote2('در حال اعمال روی دوربین…');const a=await oldCmd(type,value,true);if(a){setNote2(a.message||'دستور اجرا شد.',a.ok!==false);}else setNote2('پاسخ دوربین دریافت نشد.',false);if(!quiet)toast(a?.message||'پاسخ دوربین دریافت نشد');return a;};
-  syncControl=function(){const t=activeDevice?.telemetry||{},p=activeDevice?.pet||{};control.low=!!t.low_power;control.quality=t.quality||p.quality||'720p';if(t.zoom!=null)control.zoom=Number(t.zoom)||1;const q=document.getElementById('quality');if(q)q.value=control.quality;renderControl();};
+  syncControl=function(){const t=activeDevice?.telemetry||{},p=activeDevice?.pet||{};if(t.torch!=null)control.torch=!!t.torch;control.low=!!t.low_power;control.quality=t.quality||p.quality||'720p';if(t.zoom!=null)control.zoom=Number(t.zoom)||1;const q=document.getElementById('quality');if(q)q.value=control.quality;renderControl();};
 }catch(e){console.warn('CamCam controls override',e)}
 
 let talkStarting2=false;
