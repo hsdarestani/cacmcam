@@ -27,16 +27,19 @@ camcam.smarbiz.sbs {
 
     handle /static/sw.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Service-Worker-Allowed "/"
         root * /srv/camcam-web
         rewrite * /sw.js
         file_server
     }
 
-    # One-time repair URL for browsers that still have an old root-scoped
-    # service worker/cache. It unregisters workers, removes CacheStorage and
-    # then opens the versioned landing route.
+    # One-time repair URL. Clear-Site-Data tells Chromium to evict CacheStorage
+    # and old service-worker registrations at the HTTP layer; reset.html also
+    # replaces the currently controlling worker before navigating back to /.
     handle /refresh {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Clear-Site-Data "\"cache\", \"storage\""
+        header X-CamCam-Page "cache-repair-v3"
         root * /srv/camcam-web
         rewrite * /reset.html
         file_server
