@@ -11,21 +11,49 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3ecd
 </style>
 </head>
 <body>
-<div class="card"><div class="dot"></div><h1>در حال بروزرسانی CamCam…</h1><p>نسخه قدیمی کش‌شده پاک می‌شود و آدرس اصلی سایت دوباره از شبکه باز خواهد شد.</p></div>
+<div class="card"><div class="dot"></div><h1>در حال بروزرسانی CamCam…</h1><p>نسخه قدیمی کش‌شده و سرویس‌ورکر قبلی حذف می‌شوند و صفحه اصلی دوباره از سرور باز خواهد شد.</p></div>
 <script>
 (async()=>{
   try{
     if('serviceWorker' in navigator){
+      // Merely unregistering a worker does not immediately stop the worker that
+      // already controls this tab. Replace the root-scoped registration with
+      // CamCam's retirement worker first; it calls skipWaiting(), claims the
+      // current clients and has no fetch handler, so stale navigation caching
+      // is removed without requiring the user to close every browser tab.
+      try{
+        await navigator.serviceWorker.register('/sw.js?retire='+Date.now(),{
+          scope:'/',
+          updateViaCache:'none'
+        });
+      }catch(_){ }
+
+      await new Promise(resolve=>{
+        let done=false;
+        const finish=()=>{if(done)return;done=true;resolve()};
+        navigator.serviceWorker.addEventListener('controllerchange',finish,{once:true});
+        setTimeout(finish,2200);
+      });
+
       const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r=>r.unregister().catch(()=>false)));
+      for(const reg of regs){
+        try{await reg.update()}catch(_){ }
+        try{await reg.unregister()}catch(_){ }
+      }
     }
+
     if('caches' in window){
       const keys=await caches.keys();
       await Promise.all(keys.map(k=>caches.delete(k)));
     }
-    try{localStorage.removeItem('camcam-shell-cache-version')}catch(_){ }
+
+    try{
+      localStorage.removeItem('camcam-shell-cache-version');
+      sessionStorage.clear();
+    }catch(_){ }
   }catch(_){ }
-  await new Promise(r=>setTimeout(r,350));
+
+  await new Promise(r=>setTimeout(r,450));
   location.replace('/?fresh='+Date.now());
 })();
 </script>
