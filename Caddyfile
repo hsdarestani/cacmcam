@@ -7,6 +7,14 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
+    # Stable same-site APK URL. The binary is the signed internal install APK
+    # published by CamCam's own GitHub Actions release workflow over HTTPS.
+    handle /download/CamCam.apk {
+        header Cache-Control "no-store, max-age=0"
+        header X-Content-Type-Options "nosniff"
+        redir https://github.com/hsdarestani/cacmcam/releases/latest/download/CamCam-Test.apk 302
+    }
+
     # Dynamic Pet routes must be matched before the static /pet entrypoint.
     @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
     handle @pet_recordings {
@@ -63,12 +71,27 @@ camcam.smarbiz.sbs {
         file_server
     }
 
-    handle / {
+    # Existing Android installs use / as the Viewer URL. Keep them on the Pet
+    # app while normal browsers receive the public download landing page.
+    @android_viewer_root {
+        path /
+        header User-Agent *CamCamAndroid*
+    }
+    handle @android_viewer_root {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
         root * /srv/camcam-web
         rewrite * /pet.html
+        file_server
+    }
+
+    handle / {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Pragma "no-cache"
+        header Expires "0"
+        root * /srv/camcam-web
+        rewrite * /landing.html
         file_server
     }
 
