@@ -15,6 +15,45 @@ camcam.smarbiz.sbs {
         redir https://github.com/hsdarestani/cacmcam/releases/latest/download/CamCam-Test.apk 302
     }
 
+    # Retire any legacy service worker that used to control/cache the public
+    # root. Both historical script URLs now return the cache-reset worker.
+    handle /sw.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Service-Worker-Allowed "/"
+        root * /srv/camcam-web
+        rewrite * /sw.js
+        file_server
+    }
+
+    handle /static/sw.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /sw.js
+        file_server
+    }
+
+    # One-time repair URL for browsers that still have an old root-scoped
+    # service worker/cache. It unregisters workers, removes CacheStorage and
+    # then opens the versioned landing route.
+    handle /refresh {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /reset.html
+        file_server
+    }
+
+    # Versioned public landing route deliberately avoids the historically
+    # cached root URL and is useful as a guaranteed fresh entrypoint.
+    handle /landing {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header Pragma "no-cache"
+        header Expires "0"
+        header X-CamCam-Page "landing-v4"
+        root * /srv/camcam-web
+        rewrite * /landing.html
+        file_server
+    }
+
     # Dynamic Pet routes must be matched before the static /pet entrypoint.
     @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
     handle @pet_recordings {
@@ -93,7 +132,7 @@ camcam.smarbiz.sbs {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
-        header X-CamCam-Page "landing-v3"
+        header X-CamCam-Page "landing-v4"
         root * /srv/camcam-web
         rewrite * /landing.html
         file_server
