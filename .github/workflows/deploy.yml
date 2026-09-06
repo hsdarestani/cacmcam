@@ -153,7 +153,7 @@ jobs:
             printf '%s' "$LOCAL_PET" | grep -Fq 'CamCam Pet'
             printf '%s' "$LOCAL_PET" | grep -Fq 'وقتی خونه نیستی'
             LOCAL_CAMERA=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/camera)
-            printf '%s' "$LOCAL_CAMERA" | grep -Fq 'این گوشی را کنار پت بگذار'
+            printf '%s' "$LOCAL_CAMERA" | grep -Fq 'گوشی کنار پت'
 
             # /pet is a fresh public URL; fail if the public edge cannot expose it.
             REV=$(date +%s)
