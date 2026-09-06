@@ -48,13 +48,14 @@ public class MainActivity extends Activity {
     private static final int MEDIA_PERMISSION_REQUEST = 2401;
     private static final int MIC_PERMISSION_REQUEST = 2402;
     private static final String APP_HOST = "camcam.smarbiz.sbs";
-    private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera";
-    private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/";
+    private static final String RUNTIME_VERSION = "1.4.2";
+    private static final String WEB_REVISION = "20260906-142";
+    private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
+    private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/pet?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String PREFS = "camcam_app";
     private static final String PREF_MODE = "mode";
     private static final String MODE_CAMERA = "camera";
     private static final String MODE_VIEWER = "viewer";
-    private static final String RUNTIME_VERSION = "1.4.1";
     private static final int APP_BG = 0xFFF6F0E6;
 
     private WebView webView;
@@ -177,7 +178,14 @@ public class MainActivity extends Activity {
         releaseTalkAudio();
         if(isCameraMode())getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else{stopCameraService();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
-        resetLowPowerWindow(); destroyWebView(); webView=new WebView(this); configureWebView(); setSafeContentView(webView);
+        resetLowPowerWindow();
+        destroyWebView();
+        webView=new WebView(this);
+        // CamCam is a server-driven app shell. Never allow an old WebView cache to
+        // pin stale control code after a production deploy.
+        try{webView.clearCache(true);webView.clearHistory();}catch(Exception ignored){}
+        configureWebView();
+        setSafeContentView(webView);
         webView.loadUrl(isCameraMode()?CAMERA_URL:VIEWER_URL);
     }
 
@@ -186,6 +194,7 @@ public class MainActivity extends Activity {
     private void configureWebView() {
         WebSettings s=webView.getSettings();
         s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true); s.setMediaPlaybackRequiresUserGesture(false);
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setAllowFileAccess(false); s.setAllowContentAccess(false); s.setJavaScriptCanOpenWindowsAutomatically(false); s.setSupportMultipleWindows(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW); if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)s.setSafeBrowsingEnabled(true);
         s.setUserAgentString(s.getUserAgentString()+" CamCamAndroid/"+RUNTIME_VERSION+" "+(isCameraMode()?"Camera":"Viewer"));
@@ -196,7 +205,14 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request){return handleNavigation(request.getUrl());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){return handleNavigation(Uri.parse(url));}
-            @Override public void onPageFinished(WebView view,String url){super.onPageFinished(view,url);if(url!=null&&url.startsWith("https://"+APP_HOST))disableWebOrientationLock(view);}
+            @Override public void onPageFinished(WebView view,String url){
+                super.onPageFinished(view,url);
+                if(url!=null&&url.startsWith("https://"+APP_HOST)){
+                    disableWebOrientationLock(view);
+                    // Expose the native shell version to the web UI for diagnostics.
+                    view.evaluateJavascript("window.CAMCAM_NATIVE_VERSION='"+RUNTIME_VERSION+"';window.CAMCAM_WEB_REVISION='"+WEB_REVISION+"';",null);
+                }
+            }
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();}
         });
         webView.setWebChromeClient(new WebChromeClient(){
@@ -241,8 +257,6 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void setLowPower(boolean enabled){
             runOnUiThread(()->{
                 WindowManager.LayoutParams params=getWindow().getAttributes();
-                // Keep the activity awake in both states. The previous build let the
-                // WebView sleep here, which made a remote OFF command impossible.
                 if(isCameraMode())getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 params.screenBrightness=enabled?0.01f:WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
                 getWindow().setAttributes(params);
