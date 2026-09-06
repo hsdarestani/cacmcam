@@ -1,0 +1,48 @@
+name: Apply Pet controls hotfix
+
+on:
+  push:
+    branches: [fix/pet-controls-v2]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[pet-hotfix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/pet-controls-v2
+          fetch-depth: 0
+      - name: Inject hotfix scripts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          pairs = [
+              (Path('web/pet.html'), '<script src="/static/pet_controls_hotfix.js?v=3"></script>'),
+              (Path('web/pet_camera.html'), '<script src="/static/pet_camera_hotfix.js?v=3"></script>'),
+          ]
+          for path, tag in pairs:
+              text = path.read_text(encoding='utf-8')
+              if tag not in text:
+                  if '</body>' not in text:
+                      raise SystemExit(f'missing </body> in {path}')
+                  text = text.replace('</body>', tag + '</body>', 1)
+                  path.write_text(text, encoding='utf-8')
+          PY
+          node --check web/pet_controls_hotfix.js
+          node --check web/pet_camera_hotfix.js
+          grep -q 'pet_controls_hotfix.js?v=3' web/pet.html
+          grep -q 'pet_camera_hotfix.js?v=3' web/pet_camera.html
+      - name: Commit injected tags
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/pet.html web/pet_camera.html
+          git commit -m "Load Pet controls hotfix scripts [pet-hotfix-applied]"
+          git push origin HEAD:fix/pet-controls-v2
