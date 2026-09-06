@@ -66,30 +66,34 @@ camcam.smarbiz.sbs {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
+        header X-CamCam-Page "pet"
         root * /srv/camcam-web
         rewrite * /pet.html
         file_server
     }
 
-    # Existing Android installs use / as the Viewer URL. Keep them on the Pet
-    # app while normal browsers receive the public download landing page.
+    # Existing Android builds still open /. Match only CamCam's explicit native
+    # user-agent token; normal Chrome/Firefox/Safari must never enter the app UI.
     @android_viewer_root {
         path /
-        header User-Agent *CamCamAndroid*
+        header_regexp camcam_android_ua User-Agent (?i)CamCamAndroid/[0-9.]+
     }
     handle @android_viewer_root {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
+        header X-CamCam-Page "pet-android"
         root * /srv/camcam-web
         rewrite * /pet.html
         file_server
     }
 
+    # Public browser root is always the marketing/download landing page.
     handle / {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
+        header X-CamCam-Page "landing-v3"
         root * /srv/camcam-web
         rewrite * /landing.html
         file_server
