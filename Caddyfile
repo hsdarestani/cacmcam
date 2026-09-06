@@ -13,7 +13,7 @@ camcam.smarbiz.sbs {
         reverse_proxy petarchive:8030
     }
 
-    @pet_manual path_regexp pet_manual ^/api/pet/devices/[^/]+/manual-recordings(/[^/]+/stop)?$
+    @pet_manual path_regexp pet_manual ^/api/pet/devices/[^/]+/manual-recordings($|/start$|/[^/]+/stop$)
     handle @pet_manual {
         reverse_proxy petarchive:8030
     }
