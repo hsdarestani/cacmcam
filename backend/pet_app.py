@@ -146,6 +146,8 @@ class TelemetryBody(BaseModel):
     charging: bool | None = None
     temperature_c: float | None = Field(default=None, ge=-20, le=100)
     low_power: bool = False
+    torch: bool | None = None
+    zoom: float | None = Field(default=None, ge=1, le=8)
     codec: str | None = Field(default=None, max_length=40)
     facing: str | None = Field(default=None, max_length=20)
     quality: str | None = Field(default=None, max_length=10)
