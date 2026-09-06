@@ -1,9 +1,24 @@
-const CACHE='camcam-pet-shell-v5';
-const ASSETS=['/','/camera','/static/manifest.webmanifest','/static/pet-hero.svg'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>{
-  const u=new URL(e.request.url);
-  if(e.request.method!=='GET'||u.pathname.startsWith('/api/')||u.pathname.startsWith('/webrtc/')||u.pathname.startsWith('/archive/')||u.pathname.startsWith('/pet-archive/')) return;
-  e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r}).catch(()=>caches.match(e.request)));
+// CamCam cache reset worker.
+// Older builds registered a root/static service worker that could keep serving
+// stale application HTML at the public marketing URL. CamCam no longer needs
+// offline navigation caching, so this worker deliberately removes old caches
+// and unregisters itself.
+self.addEventListener('install', event => {
+  self.skipWaiting();
 });
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(key => caches.delete(key)));
+    await self.registration.unregister();
+    await self.clients.claim();
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      try { client.postMessage({ type: 'CAMCAM_SW_RETIRED' }); } catch (_) {}
+    }
+  })());
+});
+
+// Intentionally no fetch handler: all navigation and media requests go to the
+// network so product/landing updates cannot be shadowed by a stale cache.
