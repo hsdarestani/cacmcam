@@ -33,6 +33,32 @@ camcam.smarbiz.sbs {
         file_server
     }
 
+    # pet.html in already-installed APKs references this historical script URL.
+    # Serve a tiny bundle loader there so reliability fixes can ship instantly
+    # without requiring stale HTML or old WebViews to refresh their markup.
+    handle /static/pet_controls_hotfix.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_controls_bundle.js
+        file_server
+    }
+
+    # Keep the existing visual control-center layer available under a stable
+    # internal alias; the bundle loads it first, then the runtime reliability fix.
+    handle /static/pet_controls_visual.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_controls_hotfix.js
+        file_server
+    }
+
+    handle /static/pet_runtime_fix.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_runtime_fix.js
+        file_server
+    }
+
     # One-time repair URL. Clear-Site-Data tells Chromium to evict CacheStorage
     # and old service-worker registrations at the HTTP layer; reset.html also
     # replaces the currently controlling worker before navigating back to /.
