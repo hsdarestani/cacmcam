@@ -15,6 +15,7 @@ import android.net.http.SslError;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -38,11 +39,12 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int MEDIA_PERMISSION_REQUEST = 2401;
+    private static final int MIC_PERMISSION_REQUEST = 2402;
     private static final String APP_HOST = "camcam.smarbiz.sbs";
-    private static final String PAYMENT_HOST = "gateway.zibal.ir";
     private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera";
     private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/";
     private static final String PREFS = "camcam_app";
@@ -58,11 +60,14 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private int normalSystemUiVisibility;
     private int normalRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private TextToSpeech tts;
+    private volatile boolean ttsReady = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         configureSystemBars();
+        initTts();
         String savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MODE, null);
         if (MODE_CAMERA.equals(savedMode) || MODE_VIEWER.equals(savedMode)) {
             startMode(savedMode, false);
@@ -71,17 +76,25 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void initTts() {
+        tts = new TextToSpeech(this, status -> {
+            if (status != TextToSpeech.SUCCESS || tts == null) {
+                ttsReady = false;
+                return;
+            }
+            int result = tts.setLanguage(new Locale("fa", "IR"));
+            tts.setSpeechRate(0.90f);
+            ttsReady = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED;
+        });
+    }
+
     private void configureSystemBars() {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         getWindow().setStatusBarColor(APP_BG);
         getWindow().setNavigationBarColor(APP_BG);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            getWindow().setDecorFitsSystemWindows(true);
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getWindow().setDecorFitsSystemWindows(true);
         int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
@@ -94,18 +107,12 @@ public class MainActivity extends Activity {
         WindowManager.LayoutParams params = getWindow().getAttributes();
         params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
         getWindow().setAttributes(params);
-        if (isCameraMode()) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } else {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        }
+        if (isCameraMode()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     private void stopCameraService() {
-        try {
-            stopService(new Intent(this, CameraKeepAliveService.class));
-        } catch (Exception ignored) {
-        }
+        try { stopService(new Intent(this, CameraKeepAliveService.class)); } catch (Exception ignored) {}
     }
 
     private void showRoleChooser() {
@@ -161,7 +168,7 @@ public class MainActivity extends Activity {
         page.addView(viewer, viewerLp);
 
         TextView hint = new TextView(this);
-        hint.setText("برای تغییر نقش بعداً، در صفحه اصلی اپ دکمه برگشت گوشی را بزن.");
+        hint.setText("برای تغییر نقش بعداً، دکمه برگشت گوشی را بزن.");
         hint.setTextColor(Color.rgb(111, 129, 124));
         hint.setTextSize(11);
         hint.setGravity(Gravity.CENTER);
@@ -197,12 +204,9 @@ public class MainActivity extends Activity {
 
     private void startMode(String mode, boolean persist) {
         currentMode = mode;
-        if (persist) {
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MODE, mode).apply();
-        }
-        if (isCameraMode()) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } else {
+        if (persist) getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MODE, mode).apply();
+        if (isCameraMode()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else {
             stopCameraService();
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
@@ -214,9 +218,7 @@ public class MainActivity extends Activity {
         webView.loadUrl(isCameraMode() ? CAMERA_URL : VIEWER_URL);
     }
 
-    private boolean isCameraMode() {
-        return MODE_CAMERA.equals(currentMode);
-    }
+    private boolean isCameraMode() { return MODE_CAMERA.equals(currentMode); }
 
     private void configureWebView() {
         WebSettings settings = webView.getSettings();
@@ -229,8 +231,8 @@ public class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.3.0 " + (isCameraMode() ? "Camera" : "Viewer"));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.setSafeBrowsingEnabled(true);
+        settings.setUserAgentString(settings.getUserAgentString() + " CamCamAndroid/1.4.0 " + (isCameraMode() ? "Camera" : "Viewer"));
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -239,106 +241,76 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new NativeBridge(), "CamCamNative");
 
         webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleNavigation(request.getUrl());
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return handleNavigation(Uri.parse(url));
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return handleNavigation(request.getUrl()); }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return handleNavigation(Uri.parse(url)); }
+            @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                if (url != null && url.startsWith("https://" + APP_HOST)) {
-                    disableWebOrientationLock(view);
-                }
+                if (url != null && url.startsWith("https://" + APP_HOST)) disableWebOrientationLock(view);
             }
-
-            @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.cancel();
-            }
+            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> handleWebPermissionRequest(request));
+            @Override public void onPermissionRequest(final PermissionRequest request) { runOnUiThread(() -> handleWebPermissionRequest(request)); }
+            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingPermissionRequest == request) pendingPermissionRequest = null;
             }
-
-            @Override
-            public void onPermissionRequestCanceled(PermissionRequest request) {
-                if (pendingPermissionRequest == request) {
-                    pendingPermissionRequest = null;
-                }
-            }
-
-            @Override
-            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-                callback.invoke(origin, false, false);
-            }
-
-            @Override
-            public void onShowCustomView(View view, CustomViewCallback callback) {
-                enterFullscreen(view, callback);
-            }
-
-            @Override
-            @SuppressWarnings("deprecation")
-            public void onShowCustomView(View view, int requestedOrientation, CustomViewCallback callback) {
-                enterFullscreen(view, callback);
-            }
-
-            @Override
-            public void onHideCustomView() {
-                exitFullscreen();
-            }
+            @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) { callback.invoke(origin, false, false); }
+            @Override public void onShowCustomView(View view, CustomViewCallback callback) { enterFullscreen(view, callback); }
+            @Override @SuppressWarnings("deprecation") public void onShowCustomView(View view, int requestedOrientation, CustomViewCallback callback) { enterFullscreen(view, callback); }
+            @Override public void onHideCustomView() { exitFullscreen(); }
         });
     }
 
     private class NativeBridge {
-        @JavascriptInterface
-        public void setCameraActive(boolean active) {
+        @JavascriptInterface public boolean hasMicrophonePermission() {
+            return checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface public void requestMicrophonePermission() {
+            runOnUiThread(() -> {
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) dispatchMicPermission(true);
+                else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MIC_PERMISSION_REQUEST);
+            });
+        }
+
+        @JavascriptInterface public boolean speak(String text) {
+            if (!isCameraMode() || !ttsReady || tts == null || text == null || text.trim().isEmpty() || text.length() > 120) return false;
+            String value = text.trim();
+            runOnUiThread(() -> {
+                try { tts.speak(value, TextToSpeech.QUEUE_FLUSH, null, "camcam-pet-phrase"); } catch (Exception ignored) {}
+            });
+            return true;
+        }
+
+        @JavascriptInterface public void setCameraActive(boolean active) {
             runOnUiThread(() -> {
                 if (!isCameraMode()) return;
                 Intent service = new Intent(MainActivity.this, CameraKeepAliveService.class);
                 try {
                     if (active) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(service);
-                        } else {
-                            startService(service);
-                        }
-                    } else {
-                        stopService(service);
-                    }
-                } catch (Exception ignored) {
-                }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service);
+                        else startService(service);
+                    } else stopService(service);
+                } catch (Exception ignored) {}
             });
         }
 
-        @JavascriptInterface
-        public void setLowPower(boolean enabled) {
+        @JavascriptInterface public void setLowPower(boolean enabled) {
             runOnUiThread(() -> {
                 WindowManager.LayoutParams params = getWindow().getAttributes();
                 if (enabled) {
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     params.screenBrightness = 0.01f;
                 } else {
-                    if (isCameraMode()) {
-                        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    }
+                    if (isCameraMode()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
                 }
                 getWindow().setAttributes(params);
             });
         }
 
-        @JavascriptInterface
-        public String getBatteryInfo() {
+        @JavascriptInterface public String getBatteryInfo() {
             try {
                 Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
                 if (battery == null) return "{}";
@@ -353,21 +325,23 @@ public class MainActivity extends Activity {
                 result.put("charging", charging);
                 if (tempTenths != Integer.MIN_VALUE) result.put("temperature_c", tempTenths / 10.0);
                 return result.toString();
-            } catch (Exception ignored) {
-                return "{}";
-            }
+            } catch (Exception ignored) { return "{}"; }
         }
     }
 
+    private void dispatchMicPermission(boolean granted) {
+        if (webView == null) return;
+        String js = "window.dispatchEvent(new CustomEvent('camcam-native-mic',{detail:{granted:" + (granted ? "true" : "false") + "}}));";
+        webView.evaluateJavascript(js, null);
+    }
+
     private void disableWebOrientationLock(WebView view) {
-        String script = "(function(){"
-                + "try{"
+        String script = "(function(){try{"
                 + "if(typeof lockLandscape==='function'){lockLandscape=async function(){};}"
                 + "if(typeof unlockOrientation==='function'){unlockOrientation=function(){};}"
                 + "if(typeof goFullscreen==='function'){goFullscreen=async function(){var v=document.getElementById('archiveVideo')||document.getElementById('v');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){v.play().catch(function(){});}};}"
                 + "if(typeof fullscreenLive==='function'){fullscreenLive=async function(){var v=document.getElementById('liveVideo');if(!v)return;try{if(v.requestFullscreen){await v.requestFullscreen();}else if(v.webkitRequestFullscreen){v.webkitRequestFullscreen();}else if(v.webkitEnterFullscreen){v.webkitEnterFullscreen();}v.play().catch(function(){});}catch(e){}};}"
-                + "}catch(e){}"
-                + "})();";
+                + "}catch(e){}})();";
         view.evaluateJavascript(script, null);
     }
 
@@ -377,12 +351,9 @@ public class MainActivity extends Activity {
         fullscreenCallback = callback;
         normalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
         normalRequestedOrientation = getRequestedOrientation();
-        if (fullscreenView.getParent() instanceof ViewGroup) {
-            ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
-        }
+        if (fullscreenView.getParent() instanceof ViewGroup) ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
         FrameLayout content = findViewById(android.R.id.content);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        content.addView(fullscreenView, params);
+        content.addView(fullscreenView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         fullscreenView.setBackgroundColor(Color.BLACK);
         if (webView != null) webView.setVisibility(View.GONE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -392,20 +363,13 @@ public class MainActivity extends Activity {
 
     private void applyFullscreenUi() {
         getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        );
+                View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
     private void exitFullscreen() {
         if (fullscreenView == null) return;
-        if (fullscreenView.getParent() instanceof ViewGroup) {
-            ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
-        }
+        if (fullscreenView.getParent() instanceof ViewGroup) ((ViewGroup) fullscreenView.getParent()).removeView(fullscreenView);
         fullscreenView = null;
         if (webView != null) webView.setVisibility(View.VISIBLE);
         WebChromeClient.CustomViewCallback callback = fullscreenCallback;
@@ -419,17 +383,8 @@ public class MainActivity extends Activity {
 
     private boolean handleNavigation(Uri uri) {
         if (uri == null) return true;
-        String scheme = uri.getScheme();
-        String host = uri.getHost();
-        if ("https".equalsIgnoreCase(scheme) && APP_HOST.equalsIgnoreCase(host)) {
-            return false;
-        }
-        // Keep the native bridge isolated to CamCam pages; payment/external pages
-        // open in the system browser instead of sharing this WebView process.
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, uri));
-        } catch (Exception ignored) {
-        }
+        if ("https".equalsIgnoreCase(uri.getScheme()) && APP_HOST.equalsIgnoreCase(uri.getHost())) return false;
+        try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) {}
         return true;
     }
 
@@ -443,23 +398,14 @@ public class MainActivity extends Activity {
         List<String> missing = new ArrayList<>();
         for (String resource : request.getResources()) {
             if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && isCameraMode()
-                    && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                missing.add(Manifest.permission.CAMERA);
-            }
+                    && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) missing.add(Manifest.permission.CAMERA);
             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)
-                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                missing.add(Manifest.permission.RECORD_AUDIO);
-            }
+                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) missing.add(Manifest.permission.RECORD_AUDIO);
         }
         if (isCameraMode() && Build.VERSION.SDK_INT >= 33
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            missing.add(Manifest.permission.POST_NOTIFICATIONS);
-        }
-        if (missing.isEmpty()) {
-            grantAllowedResources(request);
-        } else {
-            requestPermissions(missing.toArray(new String[0]), MEDIA_PERMISSION_REQUEST);
-        }
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) missing.add(Manifest.permission.POST_NOTIFICATIONS);
+        if (missing.isEmpty()) grantAllowedResources(request);
+        else requestPermissions(missing.toArray(new String[0]), MEDIA_PERMISSION_REQUEST);
     }
 
     private void grantAllowedResources(PermissionRequest request) {
@@ -467,50 +413,40 @@ public class MainActivity extends Activity {
         List<String> allowed = new ArrayList<>();
         for (String resource : request.getResources()) {
             if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && isCameraMode()
-                    && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                allowed.add(resource);
-            }
+                    && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) allowed.add(resource);
             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)
-                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                allowed.add(resource);
-            }
+                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) allowed.add(resource);
         }
         pendingPermissionRequest = null;
         if (allowed.isEmpty()) request.deny();
         else request.grant(allowed.toArray(new String[0]));
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == MEDIA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
-            grantAllowedResources(pendingPermissionRequest);
+        if (requestCode == MIC_PERMISSION_REQUEST) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            dispatchMicPermission(granted);
+            return;
         }
+        if (requestCode == MEDIA_PERMISSION_REQUEST && pendingPermissionRequest != null) grantAllowedResources(pendingPermissionRequest);
     }
 
-    @Override
-    public void onConfigurationChanged(Configuration newConfig) {
+    @Override public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (fullscreenView != null) fullscreenView.post(this::applyFullscreenUi);
     }
 
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus && fullscreenView != null) applyFullscreenUi();
     }
 
-    @Override
-    public void onBackPressed() {
-        if (fullscreenView != null) {
-            exitFullscreen();
-        } else if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else if (currentMode != null) {
-            showRoleChooser();
-        } else {
-            super.onBackPressed();
-        }
+    @Override public void onBackPressed() {
+        if (fullscreenView != null) exitFullscreen();
+        else if (webView != null && webView.canGoBack()) webView.goBack();
+        else if (currentMode != null) showRoleChooser();
+        else super.onBackPressed();
     }
 
     private void destroyWebView() {
@@ -530,14 +466,15 @@ public class MainActivity extends Activity {
         }
     }
 
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         destroyWebView();
         stopCameraService();
+        if (tts != null) {
+            try { tts.stop(); tts.shutdown(); } catch (Exception ignored) {}
+            tts = null;
+        }
         super.onDestroy();
     }
 }

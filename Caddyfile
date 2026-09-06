@@ -7,10 +7,54 @@ camcam.smarbiz.sbs {
     @api path /api/*
     header @api Cache-Control "no-store, max-age=0"
 
-    # Serve the product HTML entrypoints directly from the repository checkout.
-    # This removes ambiguity between the legacy API shell, Pet service routing,
-    # and CDN cache state. Dynamic APIs and media remain on their own services.
-    handle /pet* {
+    # Dynamic Pet routes must be matched before the static /pet entrypoint.
+    @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
+    handle @pet_recordings {
+        reverse_proxy petarchive:8030
+    }
+
+    @pet_manual path_regexp pet_manual ^/api/pet/devices/[^/]+/manual-recordings($|/start$|/[^/]+/stop$)
+    handle @pet_manual {
+        reverse_proxy petarchive:8030
+    }
+
+    @pet_talk_wake path_regexp pet_talk_wake ^/api/pet/devices/[^/]+/talk-wake$
+    handle @pet_talk_wake {
+        reverse_proxy petarchive:8030
+    }
+
+    handle /api/pet/device/talk-wait {
+        reverse_proxy petarchive:8030
+    }
+
+    handle /api/pet/* {
+        reverse_proxy pet:8020
+    }
+
+    handle /pet-archive/* {
+        reverse_proxy petarchive:8030
+    }
+
+    # Historical event-highlight links still use /archive. Route them through
+    # the same authenticated, codec-compatible Pet archive gateway.
+    handle /archive/* {
+        uri replace /archive /pet-archive
+        reverse_proxy petarchive:8030
+    }
+
+    # Keep the legacy recording index available for older cached clients.
+    @legacy_recordings path_regexp legacy_recording_list ^/api/devices/[^/]+/recordings$
+    handle @legacy_recordings {
+        reverse_proxy archive:8010
+    }
+
+    handle_path /webrtc/* {
+        reverse_proxy mediamtx:8889
+    }
+
+    # Product HTML entrypoints. /pet is deliberately exact: the old /pet*
+    # matcher swallowed /pet-archive/* and sent playback clicks to dashboard.
+    handle /pet {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header Pragma "no-cache"
         header Expires "0"
@@ -35,47 +79,6 @@ camcam.smarbiz.sbs {
         root * /srv/camcam-web
         rewrite * /pet_camera.html
         file_server
-    }
-
-    # Shared/owner-aware archive list and background talk wake signaling are
-    # matched before the generic Pet API.
-    @pet_recordings path_regexp pet_recordings ^/api/pet/devices/[^/]+/recordings$
-    handle @pet_recordings {
-        reverse_proxy petarchive:8030
-    }
-
-    @pet_talk_wake path_regexp pet_talk_wake ^/api/pet/devices/[^/]+/talk-wake$
-    handle @pet_talk_wake {
-        reverse_proxy petarchive:8030
-    }
-
-    handle /api/pet/device/talk-wait {
-        reverse_proxy petarchive:8030
-    }
-
-    handle /api/pet/* {
-        reverse_proxy pet:8020
-    }
-
-    handle /pet-archive/* {
-        reverse_proxy petarchive:8030
-    }
-
-    # Event highlight links use the historical /archive path; rewrite them to the
-    # Pet archive gateway so family shares are authorized too.
-    handle /archive/* {
-        uri replace /archive /pet-archive
-        reverse_proxy petarchive:8030
-    }
-
-    # Keep the legacy recording index available for older cached clients.
-    @legacy_recordings path_regexp legacy_recording_list ^/api/devices/[^/]+/recordings$
-    handle @legacy_recordings {
-        reverse_proxy archive:8010
-    }
-
-    handle_path /webrtc/* {
-        reverse_proxy mediamtx:8889
     }
 
     handle {
