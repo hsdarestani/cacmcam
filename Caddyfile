@@ -59,6 +59,36 @@ camcam.smarbiz.sbs {
         file_server
     }
 
+    handle /static/pet_runtime_v2.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_runtime_v2.js
+        file_server
+    }
+
+    # The camera page also keeps the historical hotfix URL. Route it through a
+    # bundle so the control plane can stay alive even when WebRTC video retries.
+    handle /static/pet_camera_hotfix.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_camera_bundle.js
+        file_server
+    }
+
+    handle /static/pet_camera_visual.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_camera_hotfix.js
+        file_server
+    }
+
+    handle /static/pet_camera_runtime_v2.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_camera_runtime_v2.js
+        file_server
+    }
+
     # One-time repair URL. Clear-Site-Data tells Chromium to evict CacheStorage
     # and old service-worker registrations at the HTTP layer; reset.html also
     # replaces the currently controlling worker before navigating back to /.
