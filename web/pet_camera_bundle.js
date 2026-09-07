@@ -8,5 +8,5 @@ function load(src,done){
   s.onerror=()=>done&&done();
   document.head.appendChild(s);
 }
-load('/static/pet_camera_visual.js?v=7',()=>load('/static/pet_camera_runtime_v2.js?v=7'));
+load('/static/pet_camera_visual.js?v=8',()=>load('/static/pet_camera_runtime_v2.js?v=8',()=>load('/static/pet_camera_runtime_v3.js?v=8')));
 })();
