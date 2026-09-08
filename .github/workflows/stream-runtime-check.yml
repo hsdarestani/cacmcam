@@ -1,0 +1,25 @@
+name: Validate Pet Stream Runtimes
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/pet_controls_bundle.js'
+      - 'web/pet_camera_runtime_v2.js'
+      - '.github/workflows/stream-runtime-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/pet_controls_bundle.js'
+      - 'web/pet_camera_runtime_v2.js'
+      - '.github/workflows/stream-runtime-check.yml'
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate external pet JavaScript runtimes
+        run: |
+          node --check web/pet_controls_bundle.js
+          node --check web/pet_camera_runtime_v2.js
