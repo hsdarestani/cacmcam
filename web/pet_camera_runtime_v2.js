@@ -82,6 +82,7 @@ async function ccRecoverPublisher(reason='watchdog'){
   const now=Date.now();
   if(now-ccLastPublisherAttempt<3500)return;
   ccLastPublisherAttempt=now;
+  ccPublisherUnhealthySince=now;
   ccPublisherRecoveryBusy=true;
   ccMarkPublisherState('بازیابی تصویر','err');
   try{
