@@ -63,6 +63,68 @@ function ccStartControlPlane(){
   }catch{}
 }
 
+function ccSourceDimensions(video,maxW,maxH){
+  let trackSettings={};
+  try{trackSettings=raw?.getVideoTracks?.()[0]?.getSettings?.()||{}}catch{}
+  const sourceW=Number(video?.videoWidth||trackSettings.width||maxW)||maxW;
+  const sourceH=Number(video?.videoHeight||trackSettings.height||maxH)||maxH;
+  return [Math.max(2,sourceW),Math.max(2,sourceH)];
+}
+
+function ccOutputDimensions(video,maxW,maxH){
+  const [sourceW,sourceH]=ccSourceDimensions(video,maxW,maxH);
+  const portrait=sourceH>sourceW;
+  const boundW=portrait?maxH:maxW;
+  const boundH=portrait?maxW:maxH;
+  const scale=Math.min(1,boundW/sourceW,boundH/sourceH);
+  const even=n=>Math.max(2,Math.round((n*scale)/2)*2);
+  return [even(sourceW),even(sourceH)];
+}
+
+function ccDrawUndistorted(video,canvas){
+  if(!video?.videoWidth||!video?.videoHeight||!canvas?.width||!canvas?.height)return;
+  const vw=video.videoWidth,vh=video.videoHeight;
+  const targetAspect=canvas.width/canvas.height;
+  const z=Math.max(1,Number(digitalZoom)||1);
+  let sw=vw/z,sh=vh/z;
+
+  // The output canvas follows the camera's native orientation/aspect ratio.
+  // If a device reports slightly different dimensions after capture starts,
+  // crop minimally to the canvas ratio rather than stretching the picture.
+  if(sw/sh>targetAspect)sw=sh*targetAspect;
+  else sh=sw/targetAspect;
+  const sx=(vw-sw)/2,sy=(vh-sh)/2;
+  canvas.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+}
+
+// The historical camera page sized width and height independently against a
+// 16:9 quality box. Portrait/4:3 camera feeds could therefore be squeezed into
+// a different ratio before WebRTC ever saw them. Publish a canvas that keeps the
+// physical camera aspect ratio exactly; quality only limits the long/short edge.
+try{
+  prepareOutput=function(){
+    clearInterval(drawTimer);
+    const video=document.getElementById('preview');
+    const canvas=document.getElementById('sendCanvas');
+    const [maxW,maxH]=dims();
+    const [cw,ch]=ccOutputDimensions(video,maxW,maxH);
+    canvas.width=cw;
+    canvas.height=ch;
+
+    if(canvas.captureStream){
+      const draw=()=>ccDrawUndistorted(video,canvas);
+      draw();
+      const captured=canvas.captureStream(20);
+      out=new MediaStream();
+      captured.getVideoTracks().forEach(track=>out.addTrack(track));
+      raw?.getAudioTracks?.().forEach(track=>out.addTrack(track));
+      drawTimer=setInterval(draw,50);
+    }else{
+      out=raw;
+    }
+  };
+}catch(e){console.warn('CamCam aspect-safe publisher',e)}
+
 function ccPublisherState(){
   try{return pc?.connectionState||'none'}catch{return 'none'}
 }
@@ -195,4 +257,5 @@ setTimeout(ccStartPublisherWatchdog,0);
 
 window.__camcamCameraControlV2=true;
 window.__camcamPublisherRecoveryV1=true;
+window.__camcamAspectSafePublisherV1=true;
 })();
