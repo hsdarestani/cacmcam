@@ -14,6 +14,18 @@ function installFinal(){
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const generations={torch:0,low_power:0,zoom:0,camera:0,say:0,quality:0};
   const pending={torch:null,low_power:null};
+  let streamGeneration=0;
+  let streamRetryTimer=null;
+  let streamToastSuppressions=0;
+  const baseOpenLive=openLive;
+  const baseCloseDetail=closeDetail;
+  const realToast=toast;
+
+  toast=function(text){
+    const value=String(text||'');
+    if(streamToastSuppressions>0&&/استریم پاسخ نداد|تصویر آماده نیست/.test(value))return;
+    return realToast(text);
+  };
 
   const note=(message,ok)=>{
     const n=document.getElementById('controlNote');
@@ -168,6 +180,66 @@ function installFinal(){
     return {ok:true,queued:true,message:'فرمان ارسال شد.'};
   }
 
+  function liveState(text){
+    const el=document.getElementById('liveState');
+    if(el)el.textContent=text;
+  }
+
+  function watchConnected(){
+    const s=watchPC?.connectionState;
+    return s==='connected';
+  }
+
+  function scheduleStreamRetry(deviceId,generation,attempt,delay){
+    clearTimeout(streamRetryTimer);
+    streamRetryTimer=setTimeout(()=>{
+      if(activeId===deviceId&&streamGeneration===generation){
+        streamAttempt(deviceId,generation,attempt+1,true).catch(()=>{});
+      }
+    },delay);
+  }
+
+  async function streamAttempt(deviceId,generation,attempt=0,silent=true){
+    if(streamGeneration!==generation)return;
+    let health=null;
+    try{health=await api(`/api/pet/devices/${deviceId}/health`)}catch{}
+    if(activeId&&activeId!==deviceId)return;
+
+    if(silent)streamToastSuppressions++;
+    try{
+      await baseOpenLive(deviceId);
+    }catch{}
+    finally{
+      if(silent)streamToastSuppressions=Math.max(0,streamToastSuppressions-1);
+    }
+
+    if(streamGeneration!==generation||activeId!==deviceId)return;
+    const state=watchPC?.connectionState||'none';
+    if(state==='connected'){
+      liveState('● زنده');
+      return;
+    }
+
+    if(state==='new'||state==='connecting'){
+      liveState('در حال برقراری تصویر…');
+      clearTimeout(streamRetryTimer);
+      streamRetryTimer=setTimeout(()=>{
+        if(activeId!==deviceId||streamGeneration!==generation)return;
+        if(watchConnected())liveState('● زنده');
+        else streamAttempt(deviceId,generation,attempt+1,true).catch(()=>{});
+      },3600);
+      return;
+    }
+
+    const online=health?.online ?? activeDevice?.online;
+    liveState(online?'گوشی آنلاین · بازیابی تصویر…':'گوشی دوربین آفلاین است');
+    if(attempt===0){
+      realToast(online?'گوشی دوربین آنلاین است؛ تصویر به‌صورت خودکار در حال بازیابی است.':'گوشی دوربین فعلاً آفلاین است.');
+    }
+    const delay=online?Math.min(6000,1200*Math.pow(1.55,Math.min(attempt,5))):5000;
+    scheduleStreamRetry(deviceId,generation,attempt,delay);
+  }
+
   try{
     toggleTorch=async function(){
       const before=!!control.torch;
@@ -211,17 +283,30 @@ function installFinal(){
       return r;
     };
 
-    window.__camcamViewerRuntimeFinal='12-direct';
-    document.documentElement.dataset.camcamControlRuntime='12-direct';
+    openLive=async function(id){
+      clearTimeout(streamRetryTimer);
+      const generation=++streamGeneration;
+      await streamAttempt(id,generation,0,true);
+    };
+
+    closeDetail=function(){
+      streamGeneration++;
+      clearTimeout(streamRetryTimer);
+      return baseCloseDetail();
+    };
+
+    window.__camcamViewerRuntimeFinal='13-stream-recovery';
+    window.__camcamViewerStreamRecoveryV1=true;
+    document.documentElement.dataset.camcamControlRuntime='13-stream-recovery';
   }catch(e){console.warn('CamCam final viewer runtime',e)}
 }
 
 // Only load routes that Caddy explicitly serves. Older bundles chained through
 // v3/v4 URLs that were not mapped on production WebViews and could prevent the
 // final control layer from ever being installed.
-load('/static/pet_controls_visual.js?v=12',()=>
-  load('/static/pet_runtime_fix.js?v=12',()=>
-    load('/static/pet_runtime_v2.js?v=12',installFinal)
+load('/static/pet_controls_visual.js?v=13',()=>
+  load('/static/pet_runtime_fix.js?v=13',()=>
+    load('/static/pet_runtime_v2.js?v=13',installFinal)
   )
 );
 })();

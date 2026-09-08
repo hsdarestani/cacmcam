@@ -5,8 +5,12 @@ const ccSleep=ms=>new Promise(r=>setTimeout(r,ms));
 let ccCommandTimer=null;
 let ccHeartbeatTimer=null;
 let ccTelemetryTimer=null;
+let ccPublisherWatchTimer=null;
 let ccCommandBusy=false;
 let ccControlStarted=false;
+let ccPublisherUnhealthySince=0;
+let ccLastPublisherAttempt=0;
+let ccPublisherRecoveryBusy=false;
 
 async function ccPollCommands(){
   if(ccCommandBusy||!creds||manualStop)return;
@@ -59,6 +63,74 @@ function ccStartControlPlane(){
   }catch{}
 }
 
+function ccPublisherState(){
+  try{return pc?.connectionState||'none'}catch{return 'none'}
+}
+
+function ccMarkPublisherState(text,kind=''){
+  try{
+    const current=ccPublisherState();
+    if(current==='connected')return;
+    badge(text,kind);
+    const status=document.getElementById('status');
+    if(status)status.textContent='گوشی آنلاین است؛ اتصال تصویر به‌صورت خودکار بازیابی می‌شود.';
+  }catch{}
+}
+
+async function ccRecoverPublisher(reason='watchdog'){
+  if(!creds||manualStop||starting||ccPublisherRecoveryBusy)return;
+  const now=Date.now();
+  if(now-ccLastPublisherAttempt<3500)return;
+  ccLastPublisherAttempt=now;
+  ccPublisherUnhealthySince=now;
+  ccPublisherRecoveryBusy=true;
+  ccMarkPublisherState('بازیابی تصویر','err');
+  try{
+    try{if(pc)pc.close()}catch{}
+    pc=null;
+    await ccSleep(180);
+    await startCamera(false,false);
+  }catch(e){
+    ccMarkPublisherState('بازیابی تصویر','err');
+  }finally{
+    ccPublisherRecoveryBusy=false;
+  }
+}
+
+function ccWatchPublisher(){
+  if(!creds||manualStop)return;
+  const state=ccPublisherState();
+  const now=Date.now();
+
+  if(state==='connected'){
+    ccPublisherUnhealthySince=0;
+    return;
+  }
+
+  if(!ccPublisherUnhealthySince)ccPublisherUnhealthySince=now;
+  const unhealthyFor=now-ccPublisherUnhealthySince;
+
+  // Allow normal ICE setup and brief mobile-network handoffs to settle before
+  // tearing the publisher down. Persistent disconnects are republished.
+  if(state==='new'||state==='connecting'){
+    if(unhealthyFor>14000)ccRecoverPublisher('connect-timeout');
+    return;
+  }
+  if(state==='disconnected'){
+    if(unhealthyFor>2500)ccRecoverPublisher('disconnected');
+    return;
+  }
+  if(state==='failed'||state==='closed'||state==='none'){
+    if(unhealthyFor>1200)ccRecoverPublisher(state);
+  }
+}
+
+function ccStartPublisherWatchdog(){
+  if(ccPublisherWatchTimer)clearInterval(ccPublisherWatchTimer);
+  ccPublisherWatchTimer=setInterval(ccWatchPublisher,1200);
+  setTimeout(ccWatchPublisher,900);
+}
+
 // Anything in the old code that asks to start command polling now gets the
 // always-on implementation, rather than a loop coupled to successful WebRTC.
 try{startCommands=ccStartCommands}catch{}
@@ -69,8 +141,15 @@ try{
   const baseStartCamera=startCamera;
   startCamera=async function(...args){
     ccStartControlPlane();
-    try{return await baseStartCamera(...args)}
-    finally{ccStartControlPlane()}
+    ccStartPublisherWatchdog();
+    try{
+      const result=await baseStartCamera(...args);
+      if(ccPublisherState()==='connected')ccPublisherUnhealthySince=0;
+      return result;
+    }finally{
+      ccStartControlPlane();
+      ccStartPublisherWatchdog();
+    }
   };
 }catch{}
 
@@ -79,7 +158,10 @@ try{
 try{
   const baseStartLoops=startLoops;
   startLoops=function(){
-    try{baseStartLoops()}finally{ccStartControlPlane()}
+    try{baseStartLoops()}finally{
+      ccStartControlPlane();
+      ccStartPublisherWatchdog();
+    }
   };
 }catch{}
 
@@ -90,16 +172,27 @@ try{
   pairNow=async function(...args){
     const r=await basePairNow(...args);
     ccStartControlPlane();
+    ccStartPublisherWatchdog();
     return r;
   };
 }catch{}
 
-['focus','online','pageshow'].forEach(name=>window.addEventListener(name,()=>setTimeout(ccStartControlPlane,50)));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(ccStartControlPlane,50)});
+['focus','online','pageshow'].forEach(name=>window.addEventListener(name,()=>{
+  setTimeout(ccStartControlPlane,50);
+  setTimeout(ccWatchPublisher,120);
+}));
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden){
+    setTimeout(ccStartControlPlane,50);
+    setTimeout(ccWatchPublisher,120);
+  }
+});
 
 setTimeout(ccStartControlPlane,0);
 setTimeout(ccStartControlPlane,700);
 setTimeout(ccStartControlPlane,2500);
+setTimeout(ccStartPublisherWatchdog,0);
 
 window.__camcamCameraControlV2=true;
+window.__camcamPublisherRecoveryV1=true;
 })();
