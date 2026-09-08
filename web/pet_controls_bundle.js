@@ -16,8 +16,16 @@ function installFinal(){
   const pending={torch:null,low_power:null};
   let streamGeneration=0;
   let streamRetryTimer=null;
+  let streamToastSuppressions=0;
   const baseOpenLive=openLive;
   const baseCloseDetail=closeDetail;
+  const realToast=toast;
+
+  toast=function(text){
+    const value=String(text||'');
+    if(streamToastSuppressions>0&&/استریم پاسخ نداد|تصویر آماده نیست/.test(value))return;
+    return realToast(text);
+  };
 
   const note=(message,ok)=>{
     const n=document.getElementById('controlNote');
@@ -197,13 +205,12 @@ function installFinal(){
     try{health=await api(`/api/pet/devices/${deviceId}/health`)}catch{}
     if(activeId&&activeId!==deviceId)return;
 
-    const originalToast=toast;
-    if(silent)toast=()=>{};
+    if(silent)streamToastSuppressions++;
     try{
       await baseOpenLive(deviceId);
     }catch{}
     finally{
-      if(silent)toast=originalToast;
+      if(silent)streamToastSuppressions=Math.max(0,streamToastSuppressions-1);
     }
 
     if(streamGeneration!==generation||activeId!==deviceId)return;
@@ -227,7 +234,7 @@ function installFinal(){
     const online=health?.online ?? activeDevice?.online;
     liveState(online?'گوشی آنلاین · بازیابی تصویر…':'گوشی دوربین آفلاین است');
     if(attempt===0){
-      originalToast(online?'گوشی دوربین آنلاین است؛ تصویر به‌صورت خودکار در حال بازیابی است.':'گوشی دوربین فعلاً آفلاین است.');
+      realToast(online?'گوشی دوربین آنلاین است؛ تصویر به‌صورت خودکار در حال بازیابی است.':'گوشی دوربین فعلاً آفلاین است.');
     }
     const delay=online?Math.min(6000,1200*Math.pow(1.55,Math.min(attempt,5))):5000;
     scheduleStreamRetry(deviceId,generation,attempt,delay);
