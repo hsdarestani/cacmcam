@@ -2,9 +2,229 @@
 'use strict';
 
 const ccWait=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---- Viewer WebRTC lifecycle -------------------------------------------------
+// The viewer can stay open for hours. Android/WebView may suspend/resume the
+// page, the network can hand off between Wi-Fi/mobile, and several reconnects
+// can overlap. Keep every negotiation generation-scoped so an old async answer
+// can never be applied to a peer that was already closed by a newer attempt.
+let ccWatchGeneration=0;
+let ccWatchPendingPc=null;
+let ccWatchAbort=null;
+let ccWatchdogTimer=null;
+let ccWatchdogReconnect=null;
+let ccLastVideoTime=-1;
+let ccVideoStallTicks=0;
+const ccBaseCloseDetail=closeDetail;
+
+function ccCancelled(message='cancelled'){
+  const e=new Error(message);
+  e.ccCancelled=true;
+  return e;
+}
+
+function ccCancelWatchPending(){
+  try{ccWatchAbort?.abort()}catch{}
+  ccWatchAbort=null;
+  if(ccWatchPendingPc&&ccWatchPendingPc!==watchPC){
+    try{ccWatchPendingPc.close()}catch{}
+  }
+  ccWatchPendingPc=null;
+}
+
+function ccEnsureWatchCurrent(generation,deviceId,p){
+  if(generation!==ccWatchGeneration||activeId!==deviceId||p?.signalingState==='closed'){
+    throw ccCancelled();
+  }
+}
+
+async function ccConnectWatch(auth,generation,deviceId){
+  const p=newPeer();
+  ccWatchPendingPc=p;
+  const media=new MediaStream();
+  p.addTransceiver('video',{direction:'recvonly'});
+  p.addTransceiver('audio',{direction:'recvonly'});
+  p.ontrack=e=>{
+    if(generation!==ccWatchGeneration||activeId!==deviceId)return;
+    if(!media.getTracks().some(t=>t.id===e.track.id))media.addTrack(e.track);
+    const v=document.getElementById('liveVideo');
+    if(v){v.srcObject=media;v.play().catch(()=>{})}
+  };
+
+  try{
+    const offer=await p.createOffer();
+    ccEnsureWatchCurrent(generation,deviceId,p);
+    await p.setLocalDescription(offer);
+    await waitIce(p);
+    ccEnsureWatchCurrent(generation,deviceId,p);
+
+    const controller=new AbortController();
+    ccWatchAbort=controller;
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let response;
+    try{
+      response=await fetch(auth.whep_url,{
+        method:'POST',
+        headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},
+        body:p.localDescription.sdp,
+        signal:controller.signal
+      });
+    }finally{
+      clearTimeout(timeout);
+      if(ccWatchAbort===controller)ccWatchAbort=null;
+    }
+    ccEnsureWatchCurrent(generation,deviceId,p);
+    if(!response.ok){
+      const e=new Error('استریم پاسخ نداد ('+response.status+')');
+      e.status=response.status;
+      throw e;
+    }
+
+    const answer=await response.text();
+    ccEnsureWatchCurrent(generation,deviceId,p);
+    await p.setRemoteDescription({type:'answer',sdp:answer});
+    ccEnsureWatchCurrent(generation,deviceId,p);
+    return p;
+  }catch(e){
+    try{p.close()}catch{}
+    if(e?.name==='AbortError'&&generation!==ccWatchGeneration)throw ccCancelled();
+    if(e?.name==='InvalidStateError'&&p.signalingState==='closed')throw ccCancelled();
+    throw e;
+  }finally{
+    if(ccWatchPendingPc===p)ccWatchPendingPc=null;
+  }
+}
+
+function ccScheduleWatchdogReconnect(delay=250){
+  clearTimeout(ccWatchdogReconnect);
+  const id=activeId;
+  if(!id)return;
+  ccWatchdogReconnect=setTimeout(()=>{
+    if(activeId!==id||document.hidden)return;
+    const state=watchPC?.connectionState;
+    if(state!=='connected'||ccVideoStallTicks>=3){
+      try{openLive(id)}catch{}
+    }
+  },delay);
+}
+
+function ccStartWatchdog(){
+  if(ccWatchdogTimer)clearInterval(ccWatchdogTimer);
+  ccWatchdogTimer=setInterval(()=>{
+    if(!activeId||document.hidden)return;
+    const p=watchPC;
+    const state=p?.connectionState||'none';
+    const v=document.getElementById('liveVideo');
+
+    if(state==='failed'||state==='disconnected'||state==='closed'||state==='none'){
+      ccVideoStallTicks=0;
+      ccScheduleWatchdogReconnect(state==='disconnected'?1800:350);
+      return;
+    }
+
+    if(state==='connected'&&v){
+      const now=Number(v.currentTime||0);
+      if(v.readyState>=2&&now>0){
+        if(ccLastVideoTime>=0&&Math.abs(now-ccLastVideoTime)<0.05)ccVideoStallTicks++;
+        else ccVideoStallTicks=0;
+        ccLastVideoTime=now;
+        if(ccVideoStallTicks>=3)ccScheduleWatchdogReconnect(250);
+      }
+    }
+  },10000);
+}
+
+try{
+  connectWatch=ccConnectWatch;
+
+  openLive=async function(id){
+    const generation=++ccWatchGeneration;
+    ccCancelWatchPending();
+    clearTimeout(watchRetry);
+    clearTimeout(ccWatchdogReconnect);
+    ccVideoStallTicks=0;
+    ccLastVideoTime=-1;
+
+    activeId=id;
+    activeDevice=devices.find(x=>x.id===id);
+    document.getElementById('detail')?.classList.remove('hidden');
+    const title=document.getElementById('detailTitle');
+    if(title)title.textContent=activeDevice?.pet?.pet_name||activeDevice?.name||'دوربین';
+    const access=document.getElementById('access');
+    if(access)access.textContent=activeDevice?.access==='owner'?'مالک':activeDevice?.access==='caregiver'?'مراقب':'فقط مشاهده';
+    const care=activeDevice?.access!=='viewer';
+    ['talk','torch','lowPower','manual','zoomRange','quality'].forEach(key=>{const el=document.getElementById(key);if(el)el.disabled=!care});
+    try{showTab('live')}catch{}
+    try{syncControl()}catch{}
+    try{loadHealth()}catch{}
+    try{loadEvents()}catch{}
+    try{loadRecordings()}catch{}
+    try{loadManual()}catch{}
+
+    if(watchPC){try{watchPC.onconnectionstatechange=null;watchPC.close()}catch{}watchPC=null}
+    const stateEl=document.getElementById('liveState');
+    if(stateEl)stateEl.textContent='در حال اتصال';
+
+    try{
+      const auth=await api(`/api/pet/devices/${id}/watch-token`,{method:'POST'});
+      if(generation!==ccWatchGeneration||activeId!==id)throw ccCancelled();
+      const p=await ccConnectWatch(auth,generation,id);
+      if(generation!==ccWatchGeneration||activeId!==id){try{p.close()}catch{};throw ccCancelled()}
+      watchPC=p;
+      if(stateEl)stateEl.textContent='● زنده';
+      p.onconnectionstatechange=()=>{
+        if(watchPC!==p||activeId!==id||generation!==ccWatchGeneration)return;
+        const s=p.connectionState;
+        if(s==='connected'){
+          if(stateEl)stateEl.textContent='● زنده';
+          ccVideoStallTicks=0;
+          return;
+        }
+        if(s==='failed'||s==='disconnected'){
+          if(stateEl)stateEl.textContent='در حال بازیابی تصویر…';
+          clearTimeout(watchRetry);
+          watchRetry=setTimeout(()=>{
+            if(activeId===id&&watchPC===p&&generation===ccWatchGeneration){
+              try{openLive(id)}catch{}
+            }
+          },s==='failed'?650:2200);
+        }
+      };
+      ccStartWatchdog();
+      return p;
+    }catch(e){
+      if(e?.ccCancelled||generation!==ccWatchGeneration||activeId!==id)return null;
+      if(stateEl)stateEl.textContent='تصویر آماده نیست';
+      // Never expose low-level WebRTC state errors to the user. The outer
+      // recovery runtime decides when/how to retry this attempt.
+      toast('تصویر آماده نیست');
+      return null;
+    }
+  };
+
+  closeDetail=function(){
+    ccWatchGeneration++;
+    ccCancelWatchPending();
+    clearTimeout(ccWatchdogReconnect);
+    ccVideoStallTicks=0;
+    ccLastVideoTime=-1;
+    return ccBaseCloseDetail();
+  };
+
+  ['online','pageshow','focus'].forEach(name=>window.addEventListener(name,()=>{
+    if(activeId&&!document.hidden)ccScheduleWatchdogReconnect(150);
+  }));
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden&&activeId)ccScheduleWatchdogReconnect(180);
+  });
+  ccStartWatchdog();
+}catch(e){console.warn('CamCam viewer WebRTC lifecycle',e)}
+
+// ---- Push-to-talk lifecycle --------------------------------------------------
 let ccTalkHeld=false;
 let ccTalkBusy=false;
 let ccTalkGeneration=0;
+let ccTalkAbort=null;
 let ccRemoteAudioState=null;
 
 function ccSetNote(message,ok){
@@ -66,9 +286,6 @@ async function ccTryMic(configs){
 
 async function ccAcquireMic(){
   if(!navigator.mediaDevices?.getUserMedia)throw new Error('دسترسی میکروفن در WebView موجود نیست');
-
-  // Prepare Android audio routing before Chromium opens AudioRecord. This is
-  // important on Xiaomi/MIUI and several Android 13+ WebView builds.
   ccNativeRelease();
   await ccWait(120);
   ccNativePrepare();
@@ -83,8 +300,6 @@ async function ccAcquireMic(){
     ]);
   }catch(e){last=e}
 
-  // Explicit input selection fixes devices whose default Android audio source
-  // is unavailable even though RECORD_AUDIO permission has been granted.
   let inputs=[];
   try{inputs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput')}catch{}
   for(const input of inputs){
@@ -96,7 +311,6 @@ async function ccAcquireMic(){
     }catch(e){last=e}
   }
 
-  // One full Android audio-route reset before declaring failure.
   ccNativeRelease();
   await ccWait(450);
   ccNativePrepare();
@@ -116,9 +330,12 @@ async function ccStartTalk(e){
   ccTalkHeld=true;
   ccTalkBusy=true;
   const generation=++ccTalkGeneration;
+  const deviceId=activeId;
   const b=document.getElementById('talk');
   if(b){b.classList.add('active');b.textContent='در حال آماده‌سازی میکروفن…'}
-  const ensureHeld=()=>{if(!ccTalkHeld||generation!==ccTalkGeneration){const x=new Error('cancelled');x.ccCancelled=true;throw x}};
+  const ensureHeld=()=>{
+    if(!ccTalkHeld||generation!==ccTalkGeneration||activeId!==deviceId)throw ccCancelled();
+  };
 
   try{
     if(!await ccNativeMicPermission())throw new Error('اجازه میکروفن داده نشد');
@@ -127,26 +344,52 @@ async function ccStartTalk(e){
     talkStream=await ccAcquireMic();
     ensureHeld();
 
-    await api(`/api/pet/devices/${activeId}/talk-wake`,{method:'POST'}).catch(()=>{});
+    await api(`/api/pet/devices/${deviceId}/talk-wake`,{method:'POST'}).catch(()=>{});
     ensureHeld();
-    const auth=await api(`/api/pet/devices/${activeId}/talk-token`,{method:'POST'});
+    const auth=await api(`/api/pet/devices/${deviceId}/talk-token`,{method:'POST'});
     ensureHeld();
 
-    const p=newPeer();talkPC=p;
+    const p=newPeer();
+    talkPC=p;
     talkStream.getAudioTracks().forEach(t=>p.addTrack(t,talkStream));
     const offer=await p.createOffer();
+    ensureHeld();
     await p.setLocalDescription(offer);
     await waitIce(p);
     ensureHeld();
 
-    const r=await fetch(auth.whip_url,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},body:p.localDescription.sdp});
+    const controller=new AbortController();
+    ccTalkAbort=controller;
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let r;
+    try{
+      r=await fetch(auth.whip_url,{
+        method:'POST',
+        headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},
+        body:p.localDescription.sdp,
+        signal:controller.signal
+      });
+    }finally{
+      clearTimeout(timeout);
+      if(ccTalkAbort===controller)ccTalkAbort=null;
+    }
+    ensureHeld();
     if(!r.ok)throw new Error('مسیر صحبت برقرار نشد ('+r.status+')');
     talkResource=r.headers.get('Location');
-    await p.setRemoteDescription({type:'answer',sdp:await r.text()});
+
+    // Important: read the SDP first, then check whether pointer-up cancelled
+    // this generation. Previously pointer-up could close p during r.text(), and
+    // setRemoteDescription() then threw signalingState=closed.
+    const answer=await r.text();
+    ensureHeld();
+    if(p.signalingState==='closed')throw ccCancelled();
+    await p.setRemoteDescription({type:'answer',sdp:answer});
     ensureHeld();
     if(b)b.textContent='🎙 در حال صحبت…';
   }catch(err){
-    if(!err?.ccCancelled){
+    const cancelled=err?.ccCancelled||err?.name==='AbortError'||
+      (err?.name==='InvalidStateError'&&talkPC?.signalingState==='closed');
+    if(!cancelled){
       const raw=String(err?.message||err||'خطای نامشخص');
       const msg=/audio source|منبع صوتی اندروید/i.test(raw)
         ? 'میکروفن اندروید باز نشد؛ نسخه جدید اپ مجوز صوتی WebRTC را اصلاح می‌کند.'
@@ -160,6 +403,8 @@ async function ccStartTalk(e){
 async function ccStopTalk(){
   ccTalkHeld=false;
   ccTalkGeneration++;
+  try{ccTalkAbort?.abort()}catch{}
+  ccTalkAbort=null;
   const b=document.getElementById('talk');
   if(b){b.classList.remove('active');b.textContent='🎙 نگه دار و صحبت کن'}
   try{talkStream?.getTracks?.().forEach(t=>t.stop())}catch{}
@@ -172,7 +417,6 @@ async function ccStopTalk(){
   ccTalkBusy=false;
 }
 
-// Remove all older pointer listeners by replacing the button once more.
 const oldTalk=document.getElementById('talk');
 if(oldTalk){
   const fresh=oldTalk.cloneNode(true);
@@ -182,8 +426,7 @@ if(oldTalk){
 }
 try{startTalk=ccStartTalk;stopTalk=ccStopTalk}catch{}
 
-// Final command layer: once the camera control-plane fix is installed, ACKs
-// arrive independently of whether the video stream itself is currently up.
+// ---- Command channel ---------------------------------------------------------
 async function ccCommand(type,value){
   if(!activeId)return {ok:false,message:'دوربینی انتخاب نشده است.'};
   ccSetNote('فرمان ارسال شد؛ منتظر گوشی دوربین…');
@@ -233,4 +476,6 @@ try{
 }catch(e){console.warn('CamCam runtime v2 command layer',e)}
 
 window.__camcamViewerRuntimeV2=true;
+window.__camcamViewerNegotiationGuardV1=true;
+document.documentElement.dataset.camcamViewerRuntime='14-negotiation-guard';
 })();
