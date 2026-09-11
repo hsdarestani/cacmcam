@@ -61,6 +61,29 @@ class CareLog(base.Base):
     happened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=base.utcnow, index=True)
 
 
+class PetProfileDetail(base.Base):
+    __tablename__ = 'pet_profile_details'
+
+    device_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    photo_data_url: Mapped[str] = mapped_column(Text, default='')
+    sterilized: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    allergies: Mapped[str] = mapped_column(Text, default='')
+    medical_notes: Mapped[str] = mapped_column(Text, default='')
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=base.utcnow)
+
+
+class HealthLog(base.Base):
+    __tablename__ = 'pet_health_logs'
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    device_id: Mapped[str] = mapped_column(String(36), index=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    kind: Mapped[str] = mapped_column(String(30), index=True)
+    value: Mapped[str] = mapped_column(String(120), default='')
+    note: Mapped[str] = mapped_column(Text, default='')
+    happened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=base.utcnow, index=True)
+
+
 class ProfileBody(BaseModel):
     breed: str = Field(default='', max_length=80)
     birth_date: str | None = Field(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$')
@@ -70,6 +93,10 @@ class ProfileBody(BaseModel):
     vet_name: str = Field(default='', max_length=120)
     vet_phone: str = Field(default='', max_length=50)
     notes: str = Field(default='', max_length=2000)
+    photo_data_url: str = Field(default='', max_length=500_000)
+    sterilized: bool | None = None
+    allergies: str = Field(default='', max_length=2000)
+    medical_notes: str = Field(default='', max_length=4000)
 
 
 class CareTaskBody(BaseModel):
@@ -92,10 +119,16 @@ class QuickLogBody(BaseModel):
     local_date: str = Field(pattern=r'^\d{4}-\d{2}-\d{2}$')
     kind: str = Field(
         default='custom',
-        pattern=r'^(feed|water|walk|medication|grooming|play|custom)$',
+        pattern=r'^(feed|water|walk|medication|grooming|play|toilet|custom)$',
     )
     title: str = Field(min_length=1, max_length=100)
     note: str = Field(default='', max_length=500)
+
+
+class HealthLogBody(BaseModel):
+    kind: str = Field(pattern=r'^(weight|appetite|water|symptom|medication|vomiting|stool|note)$')
+    value: str = Field(default='', max_length=120)
+    note: str = Field(default='', max_length=2000)
 
 
 class CapabilityBody(BaseModel):
@@ -122,8 +155,19 @@ def profile_row(db: Session, device_id: str) -> PetProfile:
     return row
 
 
-def profile_dict(row: PetProfile) -> dict[str, Any]:
-    return {
+def detail_row(db: Session, device_id: str) -> PetProfileDetail:
+    row = db.get(PetProfileDetail, device_id)
+    if row:
+        return row
+    row = PetProfileDetail(device_id=device_id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def profile_dict(row: PetProfile, detail: PetProfileDetail | None = None) -> dict[str, Any]:
+    result = {
         'breed': row.breed or '',
         'birth_date': row.birth_date,
         'sex': row.sex or 'unknown',
@@ -134,6 +178,13 @@ def profile_dict(row: PetProfile) -> dict[str, Any]:
         'notes': row.notes or '',
         'updated_at': row.updated_at,
     }
+    result.update({
+        'photo_data_url': detail.photo_data_url if detail else '',
+        'sterilized': detail.sterilized if detail else None,
+        'allergies': detail.allergies if detail else '',
+        'medical_notes': detail.medical_notes if detail else '',
+    })
+    return result
 
 
 def normalize_days(values: list[int]) -> list[int]:
@@ -215,7 +266,7 @@ def get_profile(
     db: Session = Depends(base.get_db),
 ):
     base.authorized_device(db, user, device_id)
-    return profile_dict(profile_row(db, device_id))
+    return profile_dict(profile_row(db, device_id), detail_row(db, device_id))
 
 
 @app.put('/api/pet/devices/{device_id}/profile')
@@ -236,9 +287,17 @@ def update_profile(
     row.vet_phone = body.vet_phone.strip()
     row.notes = body.notes.strip()
     row.updated_at = base.utcnow()
+    detail = detail_row(db, device_id)
+    if body.photo_data_url and not body.photo_data_url.startswith('data:image/'):
+        raise HTTPException(400, 'فرمت تصویر نامعتبر است')
+    detail.photo_data_url = body.photo_data_url
+    detail.sterilized = body.sterilized
+    detail.allergies = body.allergies.strip()
+    detail.medical_notes = body.medical_notes.strip()
+    detail.updated_at = base.utcnow()
     db.commit()
     db.refresh(row)
-    return profile_dict(row)
+    return profile_dict(row, detail)
 
 
 @app.get('/api/pet/devices/{device_id}/care/tasks')
@@ -409,7 +468,7 @@ def care_today(
     done_task_ids = {row.task_id for row in logs if row.task_id}
     return {
         'local_date': local_date,
-        'profile': profile_dict(profile_row(db, device_id)),
+        'profile': profile_dict(profile_row(db, device_id), detail_row(db, device_id)),
         'tasks': [task_dict(row) for row in tasks],
         'done_task_ids': sorted(done_task_ids),
         'logs': [log_dict(row) for row in logs],
@@ -437,3 +496,57 @@ def get_capabilities(
 ):
     base.authorized_device(db, user, device_id)
     return load_capabilities(device_id) or {}
+
+
+def health_log_dict(row: HealthLog) -> dict[str, Any]:
+    return {
+        'id': row.id, 'kind': row.kind, 'value': row.value, 'note': row.note,
+        'happened_at': row.happened_at, 'user_id': row.user_id,
+    }
+
+
+@app.post('/api/pet/devices/{device_id}/health-logs')
+def create_health_log(
+    device_id: str,
+    body: HealthLogBody,
+    user: base.User = Depends(base.current_user),
+    db: Session = Depends(base.get_db),
+):
+    base.authorized_device(db, user, device_id, caregiver=True)
+    row = HealthLog(device_id=device_id, user_id=user.id, kind=body.kind,
+                    value=body.value.strip(), note=body.note.strip())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return health_log_dict(row)
+
+
+@app.get('/api/pet/devices/{device_id}/health-logs')
+def list_health_logs(
+    device_id: str,
+    user: base.User = Depends(base.current_user),
+    db: Session = Depends(base.get_db),
+):
+    base.authorized_device(db, user, device_id)
+    rows = db.scalars(select(HealthLog).where(HealthLog.device_id == device_id)
+                      .order_by(HealthLog.happened_at.desc()).limit(200)).all()
+    return [health_log_dict(row) for row in rows]
+
+
+@app.get('/api/pet/devices/{device_id}/timeline')
+def pet_timeline(
+    device_id: str,
+    user: base.User = Depends(base.current_user),
+    db: Session = Depends(base.get_db),
+):
+    base.authorized_device(db, user, device_id)
+    care = db.scalars(select(CareLog).where(CareLog.device_id == device_id)
+                      .order_by(CareLog.happened_at.desc()).limit(100)).all()
+    events = db.scalars(select(base.Event).where(base.Event.device_id == device_id,
+                       base.Event.kind.in_(['motion', 'sound']))
+                       .order_by(base.Event.created_at.desc()).limit(100)).all()
+    rows = [dict(type='care', **log_dict(row)) for row in care]
+    rows += [{'id': row.id, 'type': 'camera', 'kind': row.kind,
+              'title': 'حرکت دیده شد' if row.kind == 'motion' else 'صدا شنیده شد',
+              'note': '', 'happened_at': row.created_at} for row in events]
+    return sorted(rows, key=lambda item: item['happened_at'], reverse=True)[:200]
