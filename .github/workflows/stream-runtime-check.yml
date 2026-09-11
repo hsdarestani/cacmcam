@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - 'web/pet_controls_bundle.js'
+      - 'web/pet_runtime_v2.js'
       - 'web/pet_camera_runtime_v2.js'
       - '.github/workflows/stream-runtime-check.yml'
   push:
     branches: [main]
     paths:
       - 'web/pet_controls_bundle.js'
+      - 'web/pet_runtime_v2.js'
       - 'web/pet_camera_runtime_v2.js'
       - '.github/workflows/stream-runtime-check.yml'
 
@@ -22,4 +24,5 @@ jobs:
       - name: Validate external pet JavaScript runtimes
         run: |
           node --check web/pet_controls_bundle.js
+          node --check web/pet_runtime_v2.js
           node --check web/pet_camera_runtime_v2.js
