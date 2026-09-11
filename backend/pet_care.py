@@ -545,8 +545,13 @@ def pet_timeline(
     events = db.scalars(select(base.Event).where(base.Event.device_id == device_id,
                        base.Event.kind.in_(['motion', 'sound']))
                        .order_by(base.Event.created_at.desc()).limit(100)).all()
+    health = db.scalars(select(HealthLog).where(HealthLog.device_id == device_id)
+                        .order_by(HealthLog.happened_at.desc()).limit(100)).all()
     rows = [dict(type='care', **log_dict(row)) for row in care]
     rows += [{'id': row.id, 'type': 'camera', 'kind': row.kind,
               'title': 'حرکت دیده شد' if row.kind == 'motion' else 'صدا شنیده شد',
               'note': '', 'happened_at': row.created_at} for row in events]
+    rows += [{'id': row.id, 'type': 'health', 'kind': row.kind,
+              'title': row.value or 'ثبت سلامت', 'note': row.note,
+              'happened_at': row.happened_at} for row in health]
     return sorted(rows, key=lambda item: item['happened_at'], reverse=True)[:200]

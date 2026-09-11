@@ -63,7 +63,7 @@ class PetCareApiTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/pet/devices/camera/health-logs').json()[0]['kind'], 'weight')
         timeline = self.client.get('/api/pet/devices/camera/timeline')
         self.assertEqual(timeline.status_code, 200)
-        self.assertTrue(any(item['type'] == 'care' for item in timeline.json()))
+        self.assertTrue(any(item['type'] == 'health' for item in timeline.json()))
 
 
 if __name__ == '__main__':
