@@ -11,6 +11,10 @@ import pet_app as base
 
 app = base.app
 
+# Registers persistent pet profile, care routine, care log and device capability routes
+# before FastAPI lifespan starts, so SQLAlchemy creates the related tables safely.
+import pet_care  # noqa: E402,F401
+
 
 class CommandAckBody(BaseModel):
     command_id: str = Field(min_length=1, max_length=160)

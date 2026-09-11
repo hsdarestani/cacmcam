@@ -5,15 +5,29 @@ on:
     branches: [main]
     paths:
       - 'web/pet_controls_bundle.js'
+      - 'web/pet_controls_bundle_v2.js'
       - 'web/pet_runtime_v2.js'
+      - 'web/pet_care_v1.js'
+      - 'web/pet_camera_bundle_v2.js'
       - 'web/pet_camera_runtime_v2.js'
+      - 'web/pet_camera_companion_v1.js'
+      - 'backend/pet_entrypoint.py'
+      - 'backend/pet_care.py'
+      - 'Caddyfile'
       - '.github/workflows/stream-runtime-check.yml'
   push:
     branches: [main]
     paths:
       - 'web/pet_controls_bundle.js'
+      - 'web/pet_controls_bundle_v2.js'
       - 'web/pet_runtime_v2.js'
+      - 'web/pet_care_v1.js'
+      - 'web/pet_camera_bundle_v2.js'
       - 'web/pet_camera_runtime_v2.js'
+      - 'web/pet_camera_companion_v1.js'
+      - 'backend/pet_entrypoint.py'
+      - 'backend/pet_care.py'
+      - 'Caddyfile'
       - '.github/workflows/stream-runtime-check.yml'
 
 jobs:
@@ -21,8 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate external pet JavaScript runtimes
+      - name: Validate pet JavaScript runtimes
         run: |
           node --check web/pet_controls_bundle.js
+          node --check web/pet_controls_bundle_v2.js
           node --check web/pet_runtime_v2.js
+          node --check web/pet_care_v1.js
+          node --check web/pet_camera_bundle_v2.js
           node --check web/pet_camera_runtime_v2.js
+          node --check web/pet_camera_companion_v1.js
+      - name: Validate pet Python modules
+        run: python -m py_compile backend/pet_entrypoint.py backend/pet_care.py

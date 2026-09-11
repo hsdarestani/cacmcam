@@ -34,12 +34,26 @@ camcam.smarbiz.sbs {
     }
 
     # pet.html in already-installed APKs references this historical script URL.
-    # Serve a tiny bundle loader there so reliability fixes can ship instantly
-    # without requiring stale HTML or old WebViews to refresh their markup.
+    # Route it through a wrapper so the proven stream runtime loads first and
+    # the pet-care UI/font layer is added only afterwards.
     handle /static/pet_controls_hotfix.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         root * /srv/camcam-web
+        rewrite * /pet_controls_bundle_v2.js
+        file_server
+    }
+
+    handle /static/pet_controls_bundle.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
         rewrite * /pet_controls_bundle.js
+        file_server
+    }
+
+    handle /static/pet_care_v1.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_care_v1.js
         file_server
     }
 
@@ -67,11 +81,25 @@ camcam.smarbiz.sbs {
     }
 
     # The camera page also keeps the historical hotfix URL. Route it through a
-    # bundle so the control plane can stay alive even when WebRTC video retries.
+    # wrapper that preserves the stable runtime and adds hardware capability reporting.
     handle /static/pet_camera_hotfix.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         root * /srv/camcam-web
+        rewrite * /pet_camera_bundle_v2.js
+        file_server
+    }
+
+    handle /static/pet_camera_bundle.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
         rewrite * /pet_camera_bundle.js
+        file_server
+    }
+
+    handle /static/pet_camera_companion_v1.js {
+        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        root * /srv/camcam-web
+        rewrite * /pet_camera_companion_v1.js
         file_server
     }
 
