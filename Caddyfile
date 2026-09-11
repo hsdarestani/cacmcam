@@ -19,6 +19,7 @@ camcam.smarbiz.sbs {
     # root. Both historical script URLs now return the cache-reset worker.
     handle /sw.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         header Service-Worker-Allowed "/"
         root * /srv/camcam-web
         rewrite * /sw.js
@@ -27,6 +28,7 @@ camcam.smarbiz.sbs {
 
     handle /static/sw.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         header Service-Worker-Allowed "/"
         root * /srv/camcam-web
         rewrite * /sw.js
@@ -38,6 +40,9 @@ camcam.smarbiz.sbs {
     # the pet-care UI/font layer is added only afterwards.
     handle /static/pet_controls_hotfix.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
+        header X-CamCam-Asset "viewer-bootstrap-v3"
         root * /srv/camcam-web
         rewrite * /pet_controls_bundle_v2.js
         file_server
@@ -45,6 +50,8 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_controls_bundle.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_controls_bundle.js
         file_server
@@ -52,6 +59,8 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_care_v1.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_care_v1.js
         file_server
@@ -61,6 +70,8 @@ camcam.smarbiz.sbs {
     # internal alias; the bundle loads it first, then the runtime reliability fix.
     handle /static/pet_controls_visual.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_controls_hotfix.js
         file_server
@@ -68,6 +79,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_runtime_fix.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_runtime_fix.js
         file_server
@@ -75,6 +87,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_runtime_v2.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_runtime_v2.js
         file_server
@@ -84,6 +97,9 @@ camcam.smarbiz.sbs {
     # wrapper that preserves the stable runtime and adds hardware capability reporting.
     handle /static/pet_camera_hotfix.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
+        header X-CamCam-Asset "camera-bootstrap-v2"
         root * /srv/camcam-web
         rewrite * /pet_camera_bundle_v2.js
         file_server
@@ -91,6 +107,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_camera_bundle.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_camera_bundle.js
         file_server
@@ -98,6 +115,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_camera_companion_v1.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_camera_companion_v1.js
         file_server
@@ -105,6 +123,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_camera_visual.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_camera_hotfix.js
         file_server
@@ -112,6 +131,7 @@ camcam.smarbiz.sbs {
 
     handle /static/pet_camera_runtime_v2.js {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         root * /srv/camcam-web
         rewrite * /pet_camera_runtime_v2.js
         file_server
@@ -186,13 +206,16 @@ camcam.smarbiz.sbs {
         reverse_proxy mediamtx:8889
     }
 
-    # Product HTML entrypoints. /pet is deliberately exact: the old /pet*
-    # matcher swallowed /pet-archive/* and sent playback clicks to dashboard.
+    # Product HTML entrypoints. Clear only the HTTP/cache layer here (not cookies
+    # or local storage) so stale v=3 control scripts cannot survive a production UI rollout.
     handle /pet {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
+        header Cloudflare-CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
-        header X-CamCam-Page "pet"
+        header Clear-Site-Data "\"cache\""
+        header X-CamCam-Page "pet-ui-v3-force"
         root * /srv/camcam-web
         rewrite * /pet.html
         file_server
@@ -206,9 +229,11 @@ camcam.smarbiz.sbs {
     }
     handle @android_viewer_root {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
-        header X-CamCam-Page "pet-android"
+        header Clear-Site-Data "\"cache\""
+        header X-CamCam-Page "pet-android-ui-v3-force"
         root * /srv/camcam-web
         rewrite * /pet.html
         file_server
@@ -227,8 +252,10 @@ camcam.smarbiz.sbs {
 
     handle /camera {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        header CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
+        header Clear-Site-Data "\"cache\""
         root * /srv/camcam-web
         rewrite * /pet_camera.html
         file_server
