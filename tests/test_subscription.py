@@ -10,7 +10,8 @@ if DB_FILE.exists():
     DB_FILE.unlink()
 os.environ['DATABASE_URL'] = f'sqlite:///{DB_FILE}'
 os.environ['REDIS_URL'] = 'redis://127.0.0.1:1/0'
-os.environ['WEB_DIR'] = str(Path(__file__).resolve().parents[1] / 'web')
+LOCAL_WEB = Path(__file__).resolve().parents[1] / 'web'
+os.environ['WEB_DIR'] = str(LOCAL_WEB if LOCAL_WEB.exists() else Path('/app/web'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 
 import app  # noqa: E402
