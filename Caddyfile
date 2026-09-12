@@ -142,15 +142,14 @@ camcam.smarbiz.sbs {
         reverse_proxy mediamtx:8889
     }
 
-    # Product HTML entrypoints. Clear only the HTTP/cache layer here (not cookies
-    # or local storage) so stale v=3 control scripts cannot survive a production UI rollout.
+    # Product HTML entrypoints stay fresh while versioned canonical assets remain
+    # cached. Cache eviction is intentionally limited to the explicit /refresh route.
     handle /pet {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header CDN-Cache-Control "no-store"
         header Cloudflare-CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
-        header Clear-Site-Data "\"cache\""
         header X-CamCam-Page "pet-vnext"
         root * /srv/camcam-web
         rewrite * /pet.html
@@ -168,7 +167,6 @@ camcam.smarbiz.sbs {
         header CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
-        header Clear-Site-Data "\"cache\""
         header X-CamCam-Page "pet-vnext"
         root * /srv/camcam-web
         rewrite * /pet.html
@@ -191,7 +189,6 @@ camcam.smarbiz.sbs {
         header CDN-Cache-Control "no-store"
         header Pragma "no-cache"
         header Expires "0"
-        header Clear-Site-Data "\"cache\""
         header X-CamCam-Page "camera-vnext"
         root * /srv/camcam-web
         rewrite * /pet_camera.html

@@ -165,6 +165,11 @@ jobs:
             PUBLIC_PET=$(curl -fsS --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
             printf '%s' "$PUBLIC_PET" | grep -Fq 'data-camcam-ui="pet-vnext"'
             printf '%s' "$PUBLIC_PET" | grep -Fq '/static/pet_ui.js'
+            PET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
+            if printf '%s' "$PET_HEADERS" | grep -qi '^clear-site-data:'; then
+              echo 'Product entrypoint must not evict the Android WebView cache'
+              exit 1
+            fi
             ASSET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?v=20260912-1")
             printf '%s' "$ASSET_HEADERS" | grep -qi 'cache-control: public, max-age=31536000, immutable'
             printf '%s' "$ASSET_HEADERS" | grep -qi 'x-camcam-asset: canonical-v20260912-1'
