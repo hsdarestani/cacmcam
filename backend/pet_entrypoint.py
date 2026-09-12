@@ -17,6 +17,7 @@ import pet_care  # noqa: E402,F401
 import pet_ai  # noqa: E402,F401
 import pet_management  # noqa: E402,F401
 import pet_gallery  # noqa: E402,F401
+import pet_push  # noqa: E402,F401
 
 
 class CommandAckBody(BaseModel):
