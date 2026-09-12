@@ -50,4 +50,8 @@ android {
         abortOnError true
         checkReleaseBuilds true
     }
+
+    buildFeatures {
+        aidl true
+    }
 }
