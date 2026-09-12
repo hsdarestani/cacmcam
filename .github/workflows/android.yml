@@ -108,3 +108,5 @@ jobs:
         run: |
           TAG="android-build-${GITHUB_RUN_NUMBER}"
           gh release upload "$TAG" dist/CamCam-Bazaar.apk dist/CamCam-Bazaar.aab --clobber
+
+# Cafe Bazaar AAB verification build
