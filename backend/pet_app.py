@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     watch_token_seconds: int = 60
     cloudflare_account_id: str = ''
     cloudflare_ai_token: str = ''
-    cloudflare_ai_model: str = '@cf/meta/llama-3.1-8b-instruct'
+    cloudflare_ai_model: str = '@cf/meta/llama-3.1-8b-instruct-fast'
     cloudflare_vision_model: str = '@cf/meta/llama-3.2-11b-vision-instruct'
     ai_trial_daily_limit: int = 5
     ai_premium_daily_limit: int = 50

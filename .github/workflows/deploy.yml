@@ -62,10 +62,10 @@ jobs:
           CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
         run: |
           set -eu
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$CLOUDFLARE_AI_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID secret is empty'; exit 1; }
+          test -n "$CLOUDFLARE_AI_TOKEN" || { echo 'CLOUDFLARE_AI_TOKEN secret is empty'; exit 1; }
           TEXT_RESULT=$(curl -fsS --max-time 45 \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.1-8b-instruct" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.1-8b-instruct-fast" \
             -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
             -H "Content-Type: application/json" \
             --data '{"messages":[{"role":"user","content":"Reply only OK"}],"max_tokens":4}')
@@ -150,7 +150,7 @@ jobs:
             PREMIUM_MONTHLY_RIAL=1990000
             CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID
             CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN
-            CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+            CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
             CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct
             AI_TRIAL_DAILY_LIMIT=5
             AI_PREMIUM_DAILY_LIMIT=50
@@ -170,6 +170,7 @@ jobs:
               if [ -n "${CLOUDFLARE_AI_TOKEN:-}" ]; then
                 if grep -q '^CLOUDFLARE_AI_TOKEN=' .env; then sed -i "s|^CLOUDFLARE_AI_TOKEN=.*|CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN|" .env; else printf '\nCLOUDFLARE_AI_TOKEN=%s\n' "$CLOUDFLARE_AI_TOKEN" >> .env; fi
               fi
+              if grep -q '^CLOUDFLARE_AI_MODEL=' .env; then sed -i 's|^CLOUDFLARE_AI_MODEL=.*|CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast|' .env; else printf '\nCLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast\n' >> .env; fi
               if grep -q '^CLOUDFLARE_VISION_MODEL=' .env; then sed -i 's|^CLOUDFLARE_VISION_MODEL=.*|CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct|' .env; else printf '\nCLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct\n' >> .env; fi
               if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
