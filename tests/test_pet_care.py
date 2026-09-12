@@ -14,6 +14,7 @@ if DB_FILE.exists():
     DB_FILE.unlink()
 os.environ['DATABASE_URL'] = f'sqlite:///{DB_FILE}'
 os.environ['REDIS_URL'] = 'redis://127.0.0.1:1/0'
+os.environ['GALLERY_ROOT'] = str(Path(tempfile.gettempdir()) / 'camcam-pet-gallery-test')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 
 import pet_app as base  # noqa: E402
@@ -90,6 +91,25 @@ class PetCareApiTest(unittest.TestCase):
         self.assertEqual(completed.status_code, 200)
         self.assertIsNotNone(completed.json()['next_item'])
         self.assertEqual(completed.json()['next_item']['dosage'], 'نصف قرص')
+
+    def test_gallery_upload_list_update_and_file(self):
+        uploaded = self.client.post('/api/pet/devices/camera/gallery', files={
+            'file': ('play-ball.jpg', b'fake-jpeg-for-api-test', 'image/jpeg'),
+        }, data={'caption': 'بازی در خانه'})
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        media = uploaded.json()
+        self.assertEqual(media['category'], 'play')
+        self.assertEqual(media['classified_by'], 'fallback')
+        rows = self.client.get('/api/pet/devices/camera/gallery').json()
+        self.assertTrue(any(item['id'] == media['id'] for item in rows))
+        changed = self.client.put(f"/api/pet/devices/camera/gallery/{media['id']}", json={
+            'category': 'family', 'caption': 'کنار خانواده',
+        })
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.json()['category'], 'family')
+        served = self.client.get(media['url'])
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served.content, b'fake-jpeg-for-api-test')
 
 
 if __name__ == '__main__':

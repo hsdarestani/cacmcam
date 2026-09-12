@@ -37,8 +37,12 @@ class Settings(BaseSettings):
     cloudflare_account_id: str = ''
     cloudflare_ai_token: str = ''
     cloudflare_ai_model: str = '@cf/meta/llama-3.1-8b-instruct'
+    cloudflare_vision_model: str = '@cf/meta/llama-3.2-11b-vision-instruct'
     ai_trial_daily_limit: int = 5
     ai_premium_daily_limit: int = 50
+    gallery_root: str = '/recordings/gallery'
+    gallery_image_max_bytes: int = 15_000_000
+    gallery_video_max_bytes: int = 120_000_000
 
 
 settings = Settings()
