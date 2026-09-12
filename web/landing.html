@@ -1,15 +1,14 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-camcam-ui="landing-vnext">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#fbf6ef">
-<meta name="description" content="CamCam Pet — گوشی اضافه‌ات را به دوربین هوشمند مراقبت از پت تبدیل کن. تصویر زنده، مکالمه دوطرفه، تشخیص حرکت و صدا، آرشیو و کنترل از راه دور.">
-<title>CamCam Pet — گوشی قدیمی، دوربین هوشمند پت</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<meta name="description" content="CamCam Pet — همراه مراقبت از پت؛ تصویر زنده، برنامه روزانه، ثبت سریع مراقبت و آرشیو رویدادها با کمک گوشی اضافه.">
+<title>CamCam Pet — همراه مراقبت از پت</title>
+<link rel="preload" href="/static/fonts/Vazirmatn.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+@font-face{font-family:'Vazirmatn';src:url('/static/fonts/Vazirmatn.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
 :root{
   --bg:#fbf6ef;--bg2:#f7efe4;--paper:#fffdf9;--ink:#173b38;--muted:#75837f;--line:#eadfd1;
   --teal:#0b7f77;--teal2:#14a296;--teal3:#0f4f4a;--coral:#f0795e;--coral2:#ff9b78;--amber:#efba5f;
@@ -37,6 +36,7 @@ a{text-decoration:none;color:inherit}button{font:inherit}.container{width:min(12
 .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}.reveal.show{opacity:1;transform:none}
 @media(max-width:980px){.nav-links{display:none}.hero{grid-template-columns:1fr;min-height:auto;padding-top:54px}.hero-copy{text-align:center}.hero-copy>p{margin:auto}.hero-actions,.hero-subnote{justify-content:center}.stage{min-height:620px;max-width:650px;width:100%;margin:auto}.quick-steps{grid-template-columns:1fr}.features{grid-template-columns:repeat(2,1fr)}.dashboard-demo,.timeline-section,.download-card{grid-template-columns:1fr}.demo-copy{order:-1}.security-grid{grid-template-columns:1fr}.event-scroller{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:620px){.container{width:min(100% - 24px,1240px)}.nav{height:70px}.brand small{display:none}.nav-actions .btn:not(.primary){display:none}.hero{gap:15px;padding:44px 0 30px}.hero-copy{text-align:right}.hero-actions,.hero-subnote{justify-content:flex-start}h1{font-size:48px;letter-spacing:-2px}.hero-copy>p{font-size:14px}.stage{min-height:510px;transform:scale(.86);transform-origin:top center;margin-bottom:-65px}.phone{right:50%;transform:translateX(50%) rotate(1deg);width:325px}.camera-unit{left:-15px;width:200px}.float.quality{left:-2px}.float.private{right:-4px}.quick-steps{margin-top:0}.features{grid-template-columns:1fr}.section{padding:65px 0}.dashboard-demo{gap:18px}.console-video{height:245px}.event-scroller{display:flex;overflow-x:auto;padding-bottom:4px}.event-card{min-width:180px}.download{padding:65px 0}.download-card{padding:28px 20px;border-radius:27px}.footer-row{flex-direction:column;align-items:flex-start}.btn.large{width:100%}.download-actions{display:grid}.qr-card{max-width:280px}.nav-actions .icon-btn{display:none}}
+@media(max-width:620px){.nav-wrap,.float,.waveform{backdrop-filter:none}.bg-grid{display:none}.section,.download{content-visibility:auto;contain-intrinsic-size:700px}.halo:before,.halo:after,.pulse,.waveform span,.ptt:before,.ptt:after{animation:none}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
 </style>
 </head>
@@ -58,9 +58,9 @@ a{text-decoration:none;color:inherit}button{font:inherit}.container{width:min(12
 <main>
 <section class="container hero">
   <div class="hero-copy reveal">
-    <div class="eyebrow"><span class="pulse"></span> CamCam Pet 1.4 • یک اپ، دو نقش</div>
-    <h1>وقتی بیرونی،<br><span class="accent">کنار پتت</span> <span class="warm">باش.</span></h1>
-    <p>گوشی اضافه‌ات را کنار پت بگذار و از گوشی خودت تصویر زنده ببین، صدایش را بشنو، باهاش حرف بزن و اتفاق‌های مهم را در آرشیو دنبال کن. بدون خرید دوربین جدید.</p>
+    <div class="eyebrow"><span class="pulse"></span> همراه روزانه پت • یک اپ، دو نقش</div>
+    <h1>مراقبت روزانه،<br><span class="accent">تصویر زنده،</span> <span class="warm">خیال راحت.</span></h1>
+    <p>CamCam فقط دوربین نیست. گوشی اضافه‌ات را کنار پت بگذار، از راه دور کنارش باش و برنامه غذا، دارو، پیاده‌روی و اتفاق‌های مهم روزش را یک‌جا دنبال کن.</p>
     <div class="hero-actions"><a class="btn primary large" href="/download/CamCam.apk">↓ دانلود مستقیم CamCam</a><a class="btn large" href="/pet">ورود / شروع در وب</a></div>
     <div class="hero-subnote"><span><i>✓</i> نصب روی هر دو گوشی</span><span><i>✓</i> Android 8+</span><span><i>✓</i> استریم امن</span><span><i>✓</i> آرشیو خصوصی</span></div>
   </div>
@@ -95,7 +95,7 @@ a{text-decoration:none;color:inherit}button{font:inherit}.container{width:min(12
   <div class="quick-step"><span class="num">۳</span><span><b>کد اتصال را وارد کن</b><small>و تصویر زنده را ببین</small></span></div>
 </section>
 <section class="section soft" id="features"><div class="container">
-  <div class="section-head reveal"><span class="kicker">ساخته شده برای مراقبت واقعی</span><h2>همه چیزهایی که از یک دوربین پت انتظار داری، داخل همان گوشی قدیمی.</h2><p>CamCam فقط یک ویدیو پلیر نیست؛ یک مرکز مراقبت روزانه است که تصویر، صدا، رویداد، آرشیو و کنترل گوشی کنار پت را یکجا جمع می‌کند.</p></div>
+  <div class="section-head reveal"><span class="kicker">ساخته شده برای مراقبت واقعی</span><h2>پتت را ببین و مراقبت روزانه‌اش را ساده مدیریت کن.</h2><p>تصویر زنده، برنامه مراقبت، ثبت فعالیت و رویدادهای دوربین در یک خانه آرام و واضح کنار هم قرار می‌گیرند.</p></div>
   <div class="features">
     <article class="feature special reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg></div><b>تصویر زنده پایدار</b><p>مشاهده لحظه‌ای با وضعیت اتصال واضح، reconnect خودکار و کنترل کیفیت متناسب با شبکه.</p></article>
     <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg></div><b>Push‑to‑Talk دوطرفه</b><p>دکمه را نگه دار و همان لحظه با پت صحبت کن؛ با بازخورد بصری و موج صوتی زنده.</p></article>
@@ -103,6 +103,9 @@ a{text-decoration:none;color:inherit}button{font:inherit}.container{width:min(12
     <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg></div><b>زوم پیوسته و کنترل تصویر</b><p>به‌جای سه عدد ثابت، زوم نرم و پیوسته، تعویض دوربین، چراغ و تنظیم کیفیت در دسترس است.</p></article>
     <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 2v4M16 2v4M8 11h8M8 15h5"/></svg></div><b>آرشیو + ضبط دستی</b><p>کلیپ رویدادها را جدا ببین یا هر زمان خواستی ضبط دستی را شروع و متوقف کن.</p></article>
     <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M18.4 5.6l-2.1 2.1M21 12h-3M18.4 18.4l-2.1-2.1M12 21v-3M5.6 18.4l2.1-2.1M3 12h3M5.6 5.6l2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg></div><b>حالت کم‌مصرف</b><p>برای گوشی قدیمی کنار پت؛ با کنترل روشنایی، مصرف کمتر و وضعیت واضح فعال/غیرفعال.</p></article>
+    <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0M18 5l1 1 2-2"/></svg></div><b>پروفایل کامل پت</b><p>نام، عکس، نژاد، سن، وزن و اطلاعات مهم درمانی در حساب شما ماندگار می‌ماند.</p></article>
+    <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M7 12l2 2 4-4M15 14h3"/></svg></div><b>برنامه مراقبت روزانه</b><p>غذا، آب، دارو، پیاده‌روی و بازی را برنامه‌ریزی و با یک لمس انجام‌شده ثبت کن.</p></article>
+    <article class="feature reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 17c4-5 7 1 11-5s5-3 5-3"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="12" r="1"/></svg></div><b>تایم‌لاین و ثبت سلامت</b><p>فعالیت‌های دستی، مراقبت‌های انجام‌شده و رویدادهای مفید دوربین را به ترتیب زمان ببین.</p></article>
   </div>
 </div></section>
 <section class="section dark" id="control"><div class="container dashboard-demo">
@@ -119,7 +122,7 @@ a{text-decoration:none;color:inherit}button{font:inherit}.container{width:min(12
 </div></section>
 <section class="download" id="download"><div class="container"><div class="download-card reveal">
   <div><span class="kicker">شروع در چند دقیقه</span><h2>یک اپ. دو گوشی. یک خیال راحت‌تر.</h2><p>CamCam را روی گوشی قدیمی و گوشی روزمره نصب کن. روی اولی «دوربین» و روی دومی «بیننده» را انتخاب کن و با کد اتصال جفتشان کن.</p><div class="download-actions"><a class="btn primary large" href="/download/CamCam.apk">↓ دانلود APK اندروید</a><a class="btn large" href="/pet">ورود به حساب</a></div></div>
-  <div class="qr-card"><span class="version">CamCam 1.4</span><div class="qr-placeholder" aria-label="جای QR دانلود"></div><b>دانلود مستقیم CamCam</b><small>یک فایل برای هر دو نقش • Android 8+</small></div>
+  <div class="qr-card"><span class="version">نسخه اندروید</span><b>یک فایل برای هر دو نقش</b><small>دوربین کنار پت و همراه روزانه • Android 8+</small><a class="btn primary" href="/download/CamCam.apk">دانلود مستقیم و واقعی</a></div>
 </div></div></section>
 </main>
 <footer class="footer"><div class="container footer-row"><div class="brand"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="2.2"/><circle cx="17" cy="7" r="2.2"/><circle cx="4.5" cy="12" r="2"/><circle cx="19.5" cy="12" r="2"/><path d="M8.2 18.7c-2.6-1.5-1.6-5.4 1.2-7.2a4.5 4.5 0 0 1 5.2 0c2.8 1.8 3.8 5.7 1.2 7.2-2 1.2-3.2-.2-3.8-.2s-1.8 1.4-3.8.2Z"/></svg></span><span><strong>CamCam Pet</strong><small>گوشی اضافه، مراقبت نزدیک‌تر</small></span></div><div class="footer-links"><a href="#security">امنیت</a><a href="#features">قابلیت‌ها</a><a href="/pet">ورود</a></div><small>© 2026 CamCam Pet</small></div></footer>

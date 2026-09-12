@@ -50,6 +50,20 @@ camcam.smarbiz.sbs {
         file_server
     }
 
+    # Canonical assets are content-versioned in the HTML. Cache them at the
+    # edge and in Android WebView so reopening the app never re-downloads the
+    # complete runtime over a slow origin connection.
+    @immutable_assets path /static/pet_runtime.js /static/pet_ui.js /static/pet_camera_runtime.js /static/pet_camera_ui.js /static/fonts/* /static/audio/*
+    handle @immutable_assets {
+        header Cache-Control "public, max-age=31536000, immutable"
+        header CDN-Cache-Control "public, max-age=31536000, immutable"
+        header Cloudflare-CDN-Cache-Control "public, max-age=31536000, immutable"
+        header X-CamCam-Asset "canonical-v20260912-1"
+        root * /srv/camcam-web
+        uri strip_prefix /static
+        file_server
+    }
+
     handle /static/* {
         header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         header CDN-Cache-Control "no-store"

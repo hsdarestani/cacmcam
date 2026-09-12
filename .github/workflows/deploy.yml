@@ -157,15 +157,20 @@ jobs:
             printf '%s' "$LOCAL_PET" | grep -Fq '/static/pet_ui.js'
             LOCAL_CAMERA=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/camera)
             printf '%s' "$LOCAL_CAMERA" | grep -Fq 'data-camcam-ui="camera-vnext"'
+            LOCAL_LANDING=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/)
+            printf '%s' "$LOCAL_LANDING" | grep -Fq 'data-camcam-ui="landing-vnext"'
 
             # /pet is a fresh public URL; fail if the public edge cannot expose it.
             REV=$(date +%s)
             PUBLIC_PET=$(curl -fsS --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
             printf '%s' "$PUBLIC_PET" | grep -Fq 'data-camcam-ui="pet-vnext"'
             printf '%s' "$PUBLIC_PET" | grep -Fq '/static/pet_ui.js'
-            curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?rev=$REV" | grep -qi 'cache-control: no-store'
+            ASSET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?v=20260912-1")
+            printf '%s' "$ASSET_HEADERS" | grep -qi 'cache-control: public, max-age=31536000, immutable'
+            printf '%s' "$ASSET_HEADERS" | grep -qi 'x-camcam-asset: canonical-v20260912-1'
             echo 'CAMCAM_PET_PUBLIC_SMOKE=ok'
             echo 'CAMCAM_CAMERA_ROUTE_SMOKE=ok'
+            echo 'CAMCAM_LANDING_ROUTE_SMOKE=ok'
             echo
             docker compose ps
             echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
