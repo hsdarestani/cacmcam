@@ -1,4 +1,4 @@
-name: Build CamCam Android APK
+name: Build CamCam Android APK and AAB
 
 on:
   push:
@@ -61,10 +61,10 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build debug and release APKs
-        run: gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace
+      - name: Build debug APK, release APK and release Bundle
+        run: gradle -p android :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
 
-      - name: Stage APKs
+      - name: Stage Android outputs
         shell: bash
         run: |
           set -euo pipefail
@@ -72,17 +72,20 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk dist/CamCam-Test.apk
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
             cp android/app/build/outputs/apk/release/app-release.apk dist/CamCam-Bazaar.apk
+            cp android/app/build/outputs/bundle/release/app-release.aab dist/CamCam-Bazaar.aab
           else
             cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/CamCam-Bazaar-UNSIGNED.apk
+            cp android/app/build/outputs/bundle/release/app-release.aab dist/CamCam-Bazaar-UNSIGNED.aab
           fi
-          sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
+          sha256sum dist/*.apk dist/*.aab | tee dist/SHA256SUMS.txt
 
-      - name: Upload APK artifact
+      - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CamCam-Android-APK
+          name: CamCam-Android-Release
           path: |
             dist/*.apk
+            dist/*.aab
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
@@ -95,13 +98,13 @@ jobs:
           TAG="android-build-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" dist/CamCam-Test.apk dist/SHA256SUMS.txt \
             --title "CamCam Android build ${GITHUB_RUN_NUMBER}" \
-            --notes "Internal CamCam test build. The Cafe Bazaar release is published as a separate signed asset only when the repository signing secrets are configured." || \
+            --notes "Internal CamCam test build. Cafe Bazaar APK/AAB releases are signed only when repository signing secrets are configured." || \
           gh release upload "$TAG" dist/CamCam-Test.apk dist/SHA256SUMS.txt --clobber
 
-      - name: Publish Bazaar signed APK
+      - name: Publish Bazaar signed APK and AAB
         if: github.event_name == 'push' && steps.signing.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="android-build-${GITHUB_RUN_NUMBER}"
-          gh release upload "$TAG" dist/CamCam-Bazaar.apk --clobber
+          gh release upload "$TAG" dist/CamCam-Bazaar.apk dist/CamCam-Bazaar.aab --clobber
