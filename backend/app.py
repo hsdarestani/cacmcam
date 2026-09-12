@@ -686,85 +686,79 @@ def recording_file(device_id: str, recording_path: str, user: User = Depends(cur
 async def checkout(body: CheckoutBody, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if body.plan_code not in PLAN_MAP:
         raise HTTPException(400, 'Unknown plan')
-    if not settings.zibal_merchant:
-        raise HTTPException(503, 'Payment gateway is not configured')
-    plan, _, price_fn = PLAN_MAP[body.plan_code]
-    amount = int(price_fn())
-    payment = Payment(user_id=user.id, plan_code=body.plan_code, amount_rial=amount)
+    _, _, price_fn = PLAN_MAP[body.plan_code]
+    payment = Payment(user_id=user.id, plan_code=body.plan_code, amount_rial=int(price_fn()))
     db.add(payment)
     db.commit()
-    callback = f"{settings.payment_public_origin.rstrip('/')}/payments/camcam/callback"
-    payload = {
-        'merchant': settings.zibal_merchant,
-        'amount': amount,
-        'callbackUrl': callback,
-        'description': f'CamCam {plan} subscription',
-        'orderId': payment.id,
+    origin = settings.payment_public_origin.rstrip('/')
+    return {
+        'redirect_url': f'{origin}/payments/camcam/start?intent={payment.id}',
+        'payment_id': payment.id,
     }
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            res = await client.post('https://gateway.zibal.ir/v1/request', json=payload)
-            res.raise_for_status()
-            data = res.json()
-    except Exception as exc:
-        payment.status = 'gateway_error'
-        db.commit()
-        raise HTTPException(502, 'Could not connect to payment gateway') from exc
-    if data.get('result') != 100 or not data.get('trackId'):
-        payment.status = 'gateway_error'
-        db.commit()
-        raise HTTPException(502, data.get('message') or 'Payment request rejected')
-    payment.track_id = str(data['trackId'])
-    db.commit()
-    return {'redirect_url': f"{settings.payment_public_origin.rstrip('/')}/payment/start/{payment.track_id}", 'payment_id': payment.id}
 
 
-@app.get('/api/billing/zibal/callback')
-async def zibal_callback(request: Request, db: Session = Depends(get_db)):
-    track_id = request.query_params.get('trackId') or request.query_params.get('trackid')
-    if not track_id:
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
-    payment = db.scalar(select(Payment).where(Payment.track_id == str(track_id)))
-    if not payment:
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
-    if payment.activated_at:
-        return RedirectResponse(f'{settings.base_url}/?payment=success', status_code=303)
-    if not settings.zibal_merchant:
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
+@app.get('/api/billing/payment-intent')
+def payment_intent(intent: str, db: Session = Depends(get_db)):
+    payment = db.get(Payment, intent)
+    if not payment or payment.status != 'pending' or payment.activated_at:
+        raise HTTPException(404, 'Payment intent not found')
+    if payment.created_at < utcnow() - timedelta(minutes=30):
+        payment.status = 'expired'
+        db.commit()
+        raise HTTPException(410, 'Payment intent expired')
+    return {
+        'ok': True,
+        'intent': payment.id,
+        'plan': payment.plan_code,
+        'amount_toman': payment.amount_rial // 10,
+        'status': payment.status,
+    }
+
+
+@app.get('/api/billing/payment-return')
+async def payment_return(payment: str = 'failed', receipt: str = '', intent: str = '', db: Session = Depends(get_db)):
+    row = db.get(Payment, intent) if intent else None
+    if not row:
+        return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
+    if row.activated_at:
+        return RedirectResponse(f'{settings.base_url}/pet?payment=success', status_code=303)
+    if payment != 'success' or not receipt:
+        row.status = 'failed'
+        db.commit()
+        return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            res = await client.post('https://gateway.zibal.ir/v1/verify', json={'merchant': settings.zibal_merchant, 'trackId': int(track_id)})
+        origin = settings.payment_public_origin.rstrip('/')
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.get(f'{origin}/payments/camcam/status', params={'receipt': receipt})
             res.raise_for_status()
             data = res.json()
     except Exception:
-        return RedirectResponse(f'{settings.base_url}/?payment=pending', status_code=303)
-    if data.get('result') not in {100, 201}:
-        payment.status = 'failed'
+        return RedirectResponse(f'{settings.base_url}/pet?payment=pending', status_code=303)
+    if not data.get('ok') or data.get('status') != 'paid' or data.get('intent') != row.id:
+        return RedirectResponse(f'{settings.base_url}/pet?payment=pending', status_code=303)
+    paid_toman = int(data.get('amount_toman') or 0)
+    if paid_toman * 10 != row.amount_rial:
+        row.status = 'amount_mismatch'
         db.commit()
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
-    verified_amount = int(data.get('amount') or 0)
-    if verified_amount and verified_amount != payment.amount_rial:
-        payment.status = 'amount_mismatch'
-        db.commit()
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
-    plan, days, _ = PLAN_MAP[payment.plan_code]
-    user = db.get(User, payment.user_id)
+        return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
+    plan, days, _ = PLAN_MAP[row.plan_code]
+    user = db.get(User, row.user_id)
     if not user:
-        return RedirectResponse(f'{settings.base_url}/?payment=failed', status_code=303)
+        return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
     sub = user.subscription
     if not sub:
         sub = Subscription(user_id=user.id)
         db.add(sub)
-        db.flush()
     base = sub.current_period_end if sub.current_period_end and sub.current_period_end > utcnow() else utcnow()
     sub.plan = plan
     sub.status = 'active'
     sub.current_period_end = base + timedelta(days=days)
-    payment.status = 'verified'
-    payment.verified_at = utcnow()
-    payment.activated_at = utcnow()
+    row.track_id = receipt
+    row.status = 'verified'
+    row.verified_at = utcnow()
+    row.activated_at = utcnow()
     db.commit()
-    return RedirectResponse(f'{settings.base_url}/?payment=success', status_code=303)
+    return RedirectResponse(f'{settings.base_url}/pet?payment=success', status_code=303)
 
 
 @app.get('/api/billing/payments')
