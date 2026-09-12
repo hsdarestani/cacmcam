@@ -88,10 +88,9 @@ camcam.smarbiz.sbs {
     # Versioned public landing route deliberately avoids the historically
     # cached root URL and is useful as a guaranteed fresh entrypoint.
     handle /landing {
-        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        header Pragma "no-cache"
-        header Expires "0"
-        header X-CamCam-Page "landing-v4"
+        header Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header X-CamCam-Page "landing-vnext"
         root * /srv/camcam-web
         rewrite * /landing.html
         file_server
@@ -145,11 +144,9 @@ camcam.smarbiz.sbs {
     # Product HTML entrypoints stay fresh while versioned canonical assets remain
     # cached. Cache eviction is intentionally limited to the explicit /refresh route.
     handle /pet {
-        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        header CDN-Cache-Control "no-store"
-        header Cloudflare-CDN-Cache-Control "no-store"
-        header Pragma "no-cache"
-        header Expires "0"
+        header Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header Cloudflare-CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
         header X-CamCam-Page "pet-vnext"
         root * /srv/camcam-web
         rewrite * /pet.html
@@ -163,10 +160,8 @@ camcam.smarbiz.sbs {
         header_regexp camcam_android_ua User-Agent (?i)CamCamAndroid/[0-9.]+
     }
     handle @android_viewer_root {
-        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        header CDN-Cache-Control "no-store"
-        header Pragma "no-cache"
-        header Expires "0"
+        header Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
         header X-CamCam-Page "pet-vnext"
         root * /srv/camcam-web
         rewrite * /pet.html
@@ -175,20 +170,17 @@ camcam.smarbiz.sbs {
 
     # Public browser root is always the marketing/download landing page.
     handle / {
-        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        header Pragma "no-cache"
-        header Expires "0"
-        header X-CamCam-Page "landing-v4"
+        header Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header X-CamCam-Page "landing-vnext"
         root * /srv/camcam-web
         rewrite * /landing.html
         file_server
     }
 
     handle /camera {
-        header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        header CDN-Cache-Control "no-store"
-        header Pragma "no-cache"
-        header Expires "0"
+        header Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+        header CDN-Cache-Control "public, max-age=300, stale-while-revalidate=86400"
         header X-CamCam-Page "camera-vnext"
         root * /srv/camcam-web
         rewrite * /pet_camera.html
