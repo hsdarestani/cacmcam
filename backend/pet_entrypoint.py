@@ -15,6 +15,7 @@ app = base.app
 # before FastAPI lifespan starts, so SQLAlchemy creates the related tables safely.
 import pet_care  # noqa: E402,F401
 import pet_ai  # noqa: E402,F401
+import pet_management  # noqa: E402,F401
 
 
 class CommandAckBody(BaseModel):

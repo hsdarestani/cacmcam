@@ -76,6 +76,21 @@ class PetCareApiTest(unittest.TestCase):
         self.assertEqual(answer.json()['answer'], 'پاسخ آزمایشی')
         self.assertEqual(answer.json()['remaining'], base.settings.ai_trial_daily_limit - 1)
 
+    def test_management_item_dashboard_and_repeat(self):
+        created = self.client.post('/api/pet/devices/camera/management/items', json={
+            'category': 'medication', 'title': 'قرص ضد انگل',
+            'due_at': '2026-09-13T08:00:00Z', 'repeat_days': 30,
+            'provider': 'دکتر الف', 'dosage': 'نصف قرص', 'notes': '', 'metadata': {},
+        })
+        self.assertEqual(created.status_code, 200)
+        item = created.json()
+        dashboard = self.client.get('/api/pet/devices/camera/management/dashboard').json()
+        self.assertGreaterEqual(dashboard['counts']['medications'], 1)
+        completed = self.client.post(f"/api/pet/devices/camera/management/items/{item['id']}/complete")
+        self.assertEqual(completed.status_code, 200)
+        self.assertIsNotNone(completed.json()['next_item'])
+        self.assertEqual(completed.json()['next_item']['dosage'], 'نصف قرص')
+
 
 if __name__ == '__main__':
     unittest.main()

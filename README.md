@@ -20,6 +20,8 @@ Production URL: **https://camcam.smarbiz.sbs**
 - Protected recording list/download endpoints
 - Premium subscription: 7-day free trial, then 199,000 toman monthly
 - Cloudflare Workers AI pet assistant with server-enforced daily limits
+- Full pet-care workspace with daily routines, quick logs, health history, medications, vaccinations, appointments, grooming, nutrition, documents and family caregivers
+- Unified responsive care-first UI; camera monitoring is now one section of the product
 - Zibal request → redirect → verify payment flow
 - Idempotent subscription activation
 - Admin aggregate stats endpoint
