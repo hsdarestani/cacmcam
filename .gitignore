@@ -11,3 +11,4 @@ recordings/
 *.keystore
 android/key.properties
 android/app/release/
+android/app/google-services.json
