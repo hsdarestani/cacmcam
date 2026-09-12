@@ -715,7 +715,7 @@ async def checkout(body: CheckoutBody, user: User = Depends(current_user), db: S
         raise HTTPException(502, data.get('message') or 'Payment request rejected')
     payment.track_id = str(data['trackId'])
     db.commit()
-    return {'redirect_url': f"https://gateway.zibal.ir/start/{payment.track_id}", 'payment_id': payment.id}
+    return {'redirect_url': f"https://pay.hamooncloud.ir/payment/start/{payment.track_id}", 'payment_id': payment.id}
 
 
 @app.get('/api/billing/zibal/callback')
