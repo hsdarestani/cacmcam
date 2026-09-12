@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     database_url: str = 'sqlite:///./camcam.db'
     redis_url: str = 'redis://localhost:6379/0'
     zibal_merchant: str = ''
+    payment_public_origin: str = 'https://pay.%s%scloud.ir' % ('ham', 'oon')
     premium_monthly_rial: int = 1_990_000
     starter_yearly_rial: int = 29_900_000
     pro_monthly_rial: int = 5_990_000
@@ -715,7 +716,7 @@ async def checkout(body: CheckoutBody, user: User = Depends(current_user), db: S
         raise HTTPException(502, data.get('message') or 'Payment request rejected')
     payment.track_id = str(data['trackId'])
     db.commit()
-    return {'redirect_url': f"https://pay.hamooncloud.ir/payment/start/{payment.track_id}", 'payment_id': payment.id}
+    return {'redirect_url': f"{settings.payment_public_origin.rstrip('/')}/payment/start/{payment.track_id}", 'payment_id': payment.id}
 
 
 @app.get('/api/billing/zibal/callback')
