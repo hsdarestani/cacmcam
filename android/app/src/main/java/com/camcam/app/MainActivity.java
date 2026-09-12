@@ -48,8 +48,8 @@ public class MainActivity extends Activity {
     private static final int MEDIA_PERMISSION_REQUEST = 2401;
     private static final int MIC_PERMISSION_REQUEST = 2402;
     private static final String APP_HOST = "camcam.smarbiz.sbs";
-    private static final String RUNTIME_VERSION = "1.4.2";
-    private static final String WEB_REVISION = "20260906-142";
+    private static final String RUNTIME_VERSION = "1.4.4";
+    private static final String WEB_REVISION = "20260912-bazaar-1";
     private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/pet?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String PREFS = "camcam_app";
