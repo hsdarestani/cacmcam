@@ -170,9 +170,9 @@ jobs:
               echo 'Product entrypoint must not evict the Android WebView cache'
               exit 1
             fi
-            ASSET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?v=20260912-1")
+            ASSET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?v=20260912-2")
             printf '%s' "$ASSET_HEADERS" | grep -qi 'cache-control: public, max-age=31536000, immutable'
-            printf '%s' "$ASSET_HEADERS" | grep -qi 'x-camcam-asset: canonical-v20260912-1'
+            printf '%s' "$ASSET_HEADERS" | grep -qi 'x-camcam-asset: canonical-v20260912-2'
             echo 'CAMCAM_PET_PUBLIC_SMOKE=ok'
             echo 'CAMCAM_CAMERA_ROUTE_SMOKE=ok'
             echo 'CAMCAM_LANDING_ROUTE_SMOKE=ok'
