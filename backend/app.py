@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -15,6 +16,9 @@ from urllib.parse import urlparse
 import httpx
 import jwt
 import redis
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
     zibal_merchant: str = ''
     payment_public_origin: str = 'https://pay.%s%scloud.ir' % ('ham', 'oon')
     premium_monthly_rial: int = 1_990_000
+    bazaar_rsa_public_key: str = 'MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCtFg+S1kZFJdOYMuw2REy1pBsi29WYigMiVY5enCrNZFVVEwNludsIzDDAvhYzPMkZ71ivAP40V2TSaqIKNPlVCPVpm1QSxugLkuWBNu0v7OGXqS6ZKxRpLg/5HFnSCDH7gBMCOK/SFOJbk6OeyAqNYrvgBAYH/9lj5VMNu9ThE07pTHS9w0T2GqAsrVjUox+3L/0Twkfz769QUZ24XIlvcf+2pQLN2FROmpsIvnUCAwEAAQ=='
     starter_yearly_rial: int = 29_900_000
     pro_monthly_rial: int = 5_990_000
     pro_yearly_rial: int = 59_900_000
@@ -152,6 +157,11 @@ class PairBody(BaseModel):
 
 class CheckoutBody(BaseModel):
     plan_code: str
+
+
+class BazaarPurchaseBody(BaseModel):
+    purchase_data: str = Field(min_length=20, max_length=10000)
+    signature: str = Field(min_length=20, max_length=4000)
 
 
 class DeviceEventBody(BaseModel):
@@ -695,6 +705,60 @@ async def checkout(body: CheckoutBody, user: User = Depends(current_user), db: S
         'redirect_url': f'{origin}/payments/camcam/start?intent={payment.id}',
         'payment_id': payment.id,
     }
+
+
+@app.post('/api/billing/bazaar/verify')
+def verify_bazaar_purchase(body: BazaarPurchaseBody, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        key_bytes = base64.b64decode(settings.bazaar_rsa_public_key, validate=True)
+        public_key = serialization.load_der_public_key(key_bytes)
+        public_key.verify(
+            base64.b64decode(body.signature, validate=True),
+            body.purchase_data.encode('utf-8'),
+            padding.PKCS1v15(),
+            hashes.SHA1(),
+        )
+        purchase = json.loads(body.purchase_data)
+    except (ValueError, TypeError, InvalidSignature, json.JSONDecodeError) as exc:
+        raise HTTPException(400, 'Invalid Bazaar purchase signature') from exc
+
+    if purchase.get('packageName') != 'com.camcam':
+        raise HTTPException(400, 'Package mismatch')
+    if purchase.get('productId') != 'subcamcam0001':
+        raise HTTPException(400, 'Product mismatch')
+    if int(purchase.get('purchaseState', -1)) != 0:
+        raise HTTPException(400, 'Purchase is not completed')
+    token = str(purchase.get('purchaseToken') or purchase.get('token') or '').strip()
+    if len(token) < 8 or len(token) > 500:
+        raise HTTPException(400, 'Invalid purchase token')
+
+    existing = db.scalar(select(Payment).where(Payment.track_id == token))
+    if existing:
+        if existing.user_id != user.id:
+            raise HTTPException(409, 'Purchase already belongs to another account')
+        return {'ok': True, 'already_verified': True, 'entitlement': entitlement(user)}
+
+    payment = Payment(
+        user_id=user.id,
+        plan_code='premium_monthly',
+        amount_rial=settings.premium_monthly_rial,
+        track_id=token,
+        status='verified',
+        verified_at=utcnow(),
+        activated_at=utcnow(),
+    )
+    db.add(payment)
+    sub = user.subscription
+    if not sub:
+        sub = Subscription(user_id=user.id)
+        db.add(sub)
+    base = sub.current_period_end if sub.current_period_end and sub.current_period_end > utcnow() else utcnow()
+    sub.plan = 'premium'
+    sub.status = 'active'
+    sub.current_period_end = base + timedelta(days=30)
+    db.commit()
+    db.refresh(user)
+    return {'ok': True, 'already_verified': False, 'entitlement': entitlement(user)}
 
 
 @app.get('/api/billing/payment-intent')
