@@ -2,8 +2,12 @@ package com.camcam.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -18,6 +22,7 @@ import android.net.http.SslError;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.view.View;
@@ -40,16 +45,21 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import com.farsitel.bazaar.IInAppBillingService;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final int MEDIA_PERMISSION_REQUEST = 2401;
     private static final int MIC_PERMISSION_REQUEST = 2402;
+    private static final int BAZAAR_PURCHASE_REQUEST = 2403;
     private static final String APP_HOST = "camcam.smarbiz.sbs";
-    private static final String RUNTIME_VERSION = "1.4.4";
-    private static final String WEB_REVISION = "20260912-bazaar-1";
+    private static final String RUNTIME_VERSION = "1.4.5";
+    private static final String WEB_REVISION = "20260912-bazaar-iap-1";
+    private static final String BAZAAR_SKU = "subcamcam0001";
     private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/pet?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String PREFS = "camcam_app";
@@ -69,6 +79,18 @@ public class MainActivity extends Activity {
     private volatile boolean ttsReady = false;
     private AudioManager audioManager;
     private boolean talkAudioPrepared = false;
+    private IInAppBillingService billingService;
+    private boolean billingBound = false;
+    private final ServiceConnection billingConnection = new ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, IBinder service) {
+            billingService = IInAppBillingService.Stub.asInterface(service);
+            billingBound = true;
+        }
+        @Override public void onServiceDisconnected(ComponentName name) {
+            billingService = null;
+            billingBound = false;
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +98,7 @@ public class MainActivity extends Activity {
         configureSystemBars();
         initTts();
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        connectBazaarBilling();
         String savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MODE, null);
         if (MODE_CAMERA.equals(savedMode) || MODE_VIEWER.equals(savedMode)) startMode(savedMode, false);
         else showRoleChooser();
@@ -227,6 +250,12 @@ public class MainActivity extends Activity {
 
     private class NativeBridge {
         @JavascriptInterface public String getRuntimeVersion(){return RUNTIME_VERSION;}
+        @JavascriptInterface public boolean isBazaarBillingAvailable(){
+            if(!billingBound||billingService==null)return false;
+            try{return billingService.isBillingSupported(3,getPackageName(),"subs")==0;}catch(Exception ignored){return false;}
+        }
+        @JavascriptInterface public void purchasePremium(){runOnUiThread(()->launchBazaarPurchase());}
+        @JavascriptInterface public void restorePremium(){runOnUiThread(()->restoreBazaarPurchase());}
         @JavascriptInterface public boolean hasMicrophonePermission(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
         @JavascriptInterface public void requestMicrophonePermission(){runOnUiThread(()->{if(hasMicrophonePermission())dispatchMicPermission(true);else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION_REQUEST);});}
 
@@ -271,6 +300,71 @@ public class MainActivity extends Activity {
                 JSONObject result=new JSONObject();if(percent>=0)result.put("battery",percent);result.put("charging",charging);if(temp!=Integer.MIN_VALUE)result.put("temperature_c",temp/10.0);return result.toString();
             }catch(Exception ignored){return"{}";}
         }
+    }
+
+    private void connectBazaarBilling(){
+        try{
+            Intent intent=new Intent("ir.cafebazaar.pardakht.InAppBillingService.BIND");
+            intent.setPackage("com.farsitel.bazaar");
+            billingBound=bindService(intent,billingConnection,Context.BIND_AUTO_CREATE);
+        }catch(Exception ignored){billingBound=false;billingService=null;}
+    }
+
+    private void launchBazaarPurchase(){
+        if(billingService==null){dispatchBazaarError("برای پرداخت، کافه‌بازار را نصب یا به‌روزرسانی کن.");return;}
+        try{
+            Bundle result=billingService.getBuyIntent(3,getPackageName(),BAZAAR_SKU,"subs",UUID.randomUUID().toString());
+            int response=result==null?6:result.getInt("RESPONSE_CODE",6);
+            PendingIntent pending=result==null?null:(PendingIntent)result.getParcelable("BUY_INTENT");
+            if(response!=0||pending==null){dispatchBazaarError("پرداخت کافه‌بازار در دسترس نیست. کد "+response);return;}
+            startIntentSenderForResult(pending.getIntentSender(),BAZAAR_PURCHASE_REQUEST,new Intent(),0,0,0);
+        }catch(Exception ignored){dispatchBazaarError("ارتباط با پرداخت کافه‌بازار برقرار نشد.");}
+    }
+
+    private void restoreBazaarPurchase(){
+        if(billingService==null)return;
+        try{
+            Bundle owned=billingService.getPurchases(3,getPackageName(),"subs",null);
+            if(owned==null||owned.getInt("RESPONSE_CODE",6)!=0)return;
+            ArrayList<String> data=owned.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
+            ArrayList<String> signatures=owned.getStringArrayList("INAPP_DATA_SIGNATURE_LIST");
+            if(data==null||signatures==null)return;
+            for(int i=0;i<Math.min(data.size(),signatures.size());i++){
+                JSONObject purchase=new JSONObject(data.get(i));
+                if(BAZAAR_SKU.equals(purchase.optString("productId"))){dispatchBazaarPurchase(data.get(i),signatures.get(i));return;}
+            }
+        }catch(Exception ignored){}
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode!=BAZAAR_PURCHASE_REQUEST)return;
+        if(resultCode!=RESULT_OK||data==null){dispatchBazaarError("پرداخت لغو شد یا کامل نشد.");return;}
+        int response=data.getIntExtra("RESPONSE_CODE",0);
+        String purchaseData=data.getStringExtra("INAPP_PURCHASE_DATA");
+        String signature=data.getStringExtra("INAPP_DATA_SIGNATURE");
+        if(response!=0||purchaseData==null||signature==null){dispatchBazaarError("تأیید خرید کافه‌بازار ناموفق بود.");return;}
+        dispatchBazaarPurchase(purchaseData,signature);
+    }
+
+    private void dispatchBazaarPurchase(String purchaseData,String signature){
+        if(webView==null)return;
+        try{
+            JSONObject detail=new JSONObject();
+            detail.put("purchaseData",purchaseData);
+            detail.put("signature",signature);
+            String script="window.dispatchEvent(new CustomEvent('camcam-bazaar-purchase',{detail:"+detail.toString()+"}));";
+            runOnUiThread(()->webView.evaluateJavascript(script,null));
+        }catch(Exception ignored){dispatchBazaarError("پردازش رسید خرید ناموفق بود.");}
+    }
+
+    private void dispatchBazaarError(String message){
+        if(webView==null)return;
+        try{
+            JSONObject detail=new JSONObject();detail.put("error",message);
+            String script="window.dispatchEvent(new CustomEvent('camcam-bazaar-purchase',{detail:"+detail.toString()+"}));";
+            runOnUiThread(()->webView.evaluateJavascript(script,null));
+        }catch(Exception ignored){}
     }
 
     private synchronized boolean prepareTalkAudio(){
@@ -355,5 +449,5 @@ public class MainActivity extends Activity {
 
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
 
-    @Override protected void onDestroy(){destroyWebView();stopCameraService();releaseTalkAudio();if(tts!=null){try{tts.stop();tts.shutdown();}catch(Exception ignored){}tts=null;}super.onDestroy();}
+    @Override protected void onDestroy(){destroyWebView();stopCameraService();releaseTalkAudio();if(billingBound){try{unbindService(billingConnection);}catch(Exception ignored){}billingBound=false;billingService=null;}if(tts!=null){try{tts.stop();tts.shutdown();}catch(Exception ignored){}tts=null;}super.onDestroy();}
 }
