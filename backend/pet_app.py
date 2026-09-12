@@ -392,9 +392,15 @@ async def inactivity_loop() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
-    task = asyncio.create_task(inactivity_loop())
+    tasks = [asyncio.create_task(inactivity_loop())]
+    try:
+        import pet_push
+        tasks.append(asyncio.create_task(pet_push.notification_loop()))
+    except Exception as exc:
+        print('pet push loop could not start:', exc)
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title='CamCam Pet Service', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)

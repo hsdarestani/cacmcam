@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
+
 android {
     namespace 'com.camcam.app'
     compileSdk 35
@@ -10,8 +14,8 @@ android {
         applicationId 'com.camcam'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '1.4.5'
+        versionCode 15
+        versionName '1.4.6'
     }
 
     def bazaarKeystorePath = System.getenv('BAZAAR_KEYSTORE_PATH')
@@ -54,4 +58,10 @@ android {
     buildFeatures {
         aidl true
     }
+}
+
+dependencies {
+    implementation platform('com.google.firebase:firebase-bom:33.16.0')
+    implementation 'com.google.firebase:firebase-messaging'
+    implementation 'androidx.core:core:1.15.0'
 }

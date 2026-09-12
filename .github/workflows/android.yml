@@ -62,7 +62,17 @@ jobs:
           fi
 
       - name: Build debug APK, release APK and release Bundle
-        run: gradle -p android :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "${FIREBASE_GOOGLE_SERVICES_JSON_B64:-}" ]; then
+            printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > android/app/google-services.json
+            echo "Firebase push configuration enabled."
+          else
+            echo "Firebase configuration is not set; build will run without push registration."
+          fi
+          gradle -p android :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
 
       - name: Stage Android outputs
         shell: bash
