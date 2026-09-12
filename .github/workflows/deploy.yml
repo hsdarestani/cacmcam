@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Python syntax
-        run: python -m py_compile backend/app.py backend/archive_proxy.py backend/pet_app.py backend/pet_archive.py
+        run: python -m py_compile backend/app.py backend/archive_proxy.py backend/pet_app.py backend/pet_archive.py backend/pet_ai.py backend/pet_gallery.py backend/pet_entrypoint.py
       - name: Validate web JavaScript syntax
         run: |
           python - <<'PY'
@@ -56,6 +56,27 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Cloudflare Workers AI credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+        run: |
+          set -eu
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_AI_TOKEN"
+          TEXT_RESULT=$(curl -fsS --max-time 45 \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.1-8b-instruct" \
+            -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","content":"Reply only OK"}],"max_tokens":4}')
+          printf '%s' "$TEXT_RESULT" | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('success') is True and data.get('result'), data.get('errors')"
+          VISION_RESULT=$(curl -fsS --max-time 45 \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.2-11b-vision-instruct" \
+            -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"prompt":"agree"}')
+          printf '%s' "$VISION_RESULT" | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('success') is True, data.get('errors')"
+          echo 'CLOUDFLARE_WORKERS_AI=ok'
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
         env:
@@ -130,6 +151,7 @@ jobs:
             CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID
             CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN
             CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+            CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct
             AI_TRIAL_DAILY_LIMIT=5
             AI_PREMIUM_DAILY_LIMIT=50
             ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE
@@ -148,6 +170,7 @@ jobs:
               if [ -n "${CLOUDFLARE_AI_TOKEN:-}" ]; then
                 if grep -q '^CLOUDFLARE_AI_TOKEN=' .env; then sed -i "s|^CLOUDFLARE_AI_TOKEN=.*|CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN|" .env; else printf '\nCLOUDFLARE_AI_TOKEN=%s\n' "$CLOUDFLARE_AI_TOKEN" >> .env; fi
               fi
+              if grep -q '^CLOUDFLARE_VISION_MODEL=' .env; then sed -i 's|^CLOUDFLARE_VISION_MODEL=.*|CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct|' .env; else printf '\nCLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct\n' >> .env; fi
               if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
             fi
 
