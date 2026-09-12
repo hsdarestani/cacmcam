@@ -693,7 +693,7 @@ async def checkout(body: CheckoutBody, user: User = Depends(current_user), db: S
     payment = Payment(user_id=user.id, plan_code=body.plan_code, amount_rial=amount)
     db.add(payment)
     db.commit()
-    callback = f'{settings.base_url}/api/billing/zibal/callback'
+    callback = f"{settings.payment_public_origin.rstrip('/')}/payments/camcam/callback"
     payload = {
         'merchant': settings.zibal_merchant,
         'amount': amount,
