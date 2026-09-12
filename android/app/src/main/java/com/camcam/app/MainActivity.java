@@ -46,6 +46,7 @@ import android.widget.TextView;
 import org.json.JSONObject;
 
 import com.farsitel.bazaar.IInAppBillingService;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,9 +57,10 @@ public class MainActivity extends Activity {
     private static final int MEDIA_PERMISSION_REQUEST = 2401;
     private static final int MIC_PERMISSION_REQUEST = 2402;
     private static final int BAZAAR_PURCHASE_REQUEST = 2403;
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 2404;
     private static final String APP_HOST = "camcam.smarbiz.sbs";
-    private static final String RUNTIME_VERSION = "1.4.5";
-    private static final String WEB_REVISION = "20260912-bazaar-iap-1";
+    private static final String RUNTIME_VERSION = "1.4.6";
+    private static final String WEB_REVISION = "20260912-native-push-1";
     private static final String BAZAAR_SKU = "subcamcam0001";
     private static final String CAMERA_URL = "https://camcam.smarbiz.sbs/camera?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
     private static final String VIEWER_URL = "https://camcam.smarbiz.sbs/pet?native=" + RUNTIME_VERSION + "&rev=" + WEB_REVISION;
@@ -81,6 +83,7 @@ public class MainActivity extends Activity {
     private boolean talkAudioPrepared = false;
     private IInAppBillingService billingService;
     private boolean billingBound = false;
+    private String pendingNotificationRoute;
     private final ServiceConnection billingConnection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder service) {
             billingService = IInAppBillingService.Stub.asInterface(service);
@@ -99,6 +102,7 @@ public class MainActivity extends Activity {
         initTts();
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
         connectBazaarBilling();
+        pendingNotificationRoute = getIntent().getStringExtra("camcam_route");
         String savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MODE, null);
         if (MODE_CAMERA.equals(savedMode) || MODE_VIEWER.equals(savedMode)) startMode(savedMode, false);
         else showRoleChooser();
@@ -234,6 +238,8 @@ public class MainActivity extends Activity {
                     disableWebOrientationLock(view);
                     // Expose the native shell version to the web UI for diagnostics.
                     view.evaluateJavascript("window.CAMCAM_NATIVE_VERSION='"+RUNTIME_VERSION+"';window.CAMCAM_WEB_REVISION='"+WEB_REVISION+"';",null);
+                    dispatchPushToken();
+                    dispatchPendingNotification();
                 }
             }
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();}
@@ -256,6 +262,8 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void purchasePremium(){runOnUiThread(()->launchBazaarPurchase());}
         @JavascriptInterface public void restorePremium(){runOnUiThread(()->restoreBazaarPurchase());}
+        @JavascriptInterface public void enablePushNotifications(){runOnUiThread(()->requestPushPermission());}
+        @JavascriptInterface public boolean hasPushPermission(){return Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;}
         @JavascriptInterface public boolean hasMicrophonePermission(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
         @JavascriptInterface public void requestMicrophonePermission(){runOnUiThread(()->{if(hasMicrophonePermission())dispatchMicPermission(true);else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION_REQUEST);});}
 
@@ -410,7 +418,46 @@ public class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
         super.onRequestPermissionsResult(requestCode,permissions,grantResults);
         if(requestCode==MIC_PERMISSION_REQUEST){boolean granted=grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED;dispatchMicPermission(granted);return;}
+        if(requestCode==NOTIFICATION_PERMISSION_REQUEST){dispatchPushPermission(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED);return;}
         if(requestCode==MEDIA_PERMISSION_REQUEST&&pendingPermissionRequest!=null)grantAllowedResources(pendingPermissionRequest);
+    }
+
+    private void requestPushPermission(){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION_REQUEST);
+        }else{dispatchPushPermission(true);dispatchPushToken();}
+    }
+
+    private void dispatchPushPermission(boolean granted){
+        if(webView!=null)webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('camcam-native-push-permission',{detail:{granted:"+(granted?"true":"false")+"}}));",null);
+        if(granted)dispatchPushToken();
+    }
+
+    private void dispatchPushToken(){
+        try{FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task->{
+            if(!task.isSuccessful()||task.getResult()==null)return;
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("fcm_token",task.getResult()).apply();
+            CamCamMessagingService.dispatchTokenToActivity(this,task.getResult());
+        });}catch(Exception ignored){}
+    }
+
+    void deliverPushToken(String token){
+        if(webView==null||token==null)return;
+        try{JSONObject detail=new JSONObject();detail.put("token",token);detail.put("platform","android");
+            runOnUiThread(()->webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('camcam-native-push-token',{detail:"+detail.toString()+"}));",null));
+        }catch(Exception ignored){}
+    }
+
+    private void dispatchPendingNotification(){
+        if(webView==null||pendingNotificationRoute==null)return;
+        try{JSONObject detail=new JSONObject();detail.put("route",pendingNotificationRoute);
+            String script="window.dispatchEvent(new CustomEvent('camcam-native-notification-open',{detail:"+detail.toString()+"}));";
+            pendingNotificationRoute=null;webView.evaluateJavascript(script,null);
+        }catch(Exception ignored){}
+    }
+
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);pendingNotificationRoute=intent.getStringExtra("camcam_route");dispatchPendingNotification();
     }
 
     private void disableWebOrientationLock(WebView view){
