@@ -353,7 +353,10 @@ async def recordings(device_id: str, request: Request):
                 params={'path': f'cam/{device_id}'},
                 headers={'Authorization': f'Bearer {token}'},
             )
-        if response.status_code == 404:
+        # MediaMTX returns 400 (not 404) when a valid camera path has not
+        # produced its first recording yet. That is an empty archive, not a
+        # gateway failure.
+        if response.status_code in (400, 404):
             return []
         response.raise_for_status()
         spans = response.json()

@@ -58,7 +58,7 @@ camcam.smarbiz.sbs {
         header Cache-Control "public, max-age=31536000, immutable"
         header CDN-Cache-Control "public, max-age=31536000, immutable"
         header Cloudflare-CDN-Cache-Control "public, max-age=31536000, immutable"
-        header X-CamCam-Asset "canonical-v20260912-2"
+        header X-CamCam-Asset "canonical-v20260912-3"
         root * /srv/camcam-web
         uri strip_prefix /static
         file_server
