@@ -10,8 +10,8 @@ android {
         applicationId 'com.camcam'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '1.4.3'
+        versionCode 13
+        versionName '1.4.4'
     }
 
     def bazaarKeystorePath = System.getenv('BAZAAR_KEYSTORE_PATH')
