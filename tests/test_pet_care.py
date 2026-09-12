@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, patch
 from datetime import timedelta
 from pathlib import Path
 
@@ -64,6 +65,16 @@ class PetCareApiTest(unittest.TestCase):
         timeline = self.client.get('/api/pet/devices/camera/timeline')
         self.assertEqual(timeline.status_code, 200)
         self.assertTrue(any(item['type'] == 'health' for item in timeline.json()))
+
+    def test_ai_status_and_daily_usage(self):
+        status = self.client.get('/api/pet/devices/camera/ai/status')
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()['daily_limit'], base.settings.ai_trial_daily_limit)
+        with patch('pet_ai.cloudflare_answer', new=AsyncMock(return_value='پاسخ آزمایشی')):
+            answer = self.client.post('/api/pet/devices/camera/ai/ask', json={'question': 'حال پت من چطور است؟'})
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual(answer.json()['answer'], 'پاسخ آزمایشی')
+        self.assertEqual(answer.json()['remaining'], base.settings.ai_trial_daily_limit - 1)
 
 
 if __name__ == '__main__':

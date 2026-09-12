@@ -18,7 +18,8 @@ Production URL: **https://camcam.smarbiz.sbs**
 - Lightweight on-device motion detection and event timeline
 - Server-side fMP4 recording with plan-based retention cleanup
 - Protected recording list/download endpoints
-- Starter and Pro monthly/yearly subscriptions
+- Premium subscription: 7-day free trial, then 199,000 toman monthly
+- Cloudflare Workers AI pet assistant with server-enforced daily limits
 - Zibal request → redirect → verify payment flow
 - Idempotent subscription activation
 - Admin aggregate stats endpoint
@@ -40,6 +41,7 @@ GitHub Actions:
 - `HOST` — deployment server host/IP
 - `PASS` — SSH password
 - `ZIBAL_MERCHANT` — Zibal merchant identifier (required for paid checkout)
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` — Workers AI credentials
 
 Optional:
 
@@ -53,8 +55,7 @@ The first deployment generates `SECRET_KEY` and `DB_PASSWORD` directly on the se
 
 Default amounts are environment-configurable and are intentionally kept outside application logic:
 
-- Starter: 3 cameras, 7-day recording retention
-- Pro: 10 cameras, 30-day recording retention
+- Premium: 10 cameras, 30-day recording retention and all features (1,990,000 IRR/month)
 - Trial: 1 camera, 1-day recording retention for 7 days
 
 All amounts sent to Zibal are in IRR.

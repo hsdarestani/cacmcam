@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     database_url: str = 'sqlite:///./camcam.db'
     redis_url: str = 'redis://localhost:6379/0'
     watch_token_seconds: int = 60
+    cloudflare_account_id: str = ''
+    cloudflare_ai_token: str = ''
+    cloudflare_ai_model: str = '@cf/meta/llama-3.1-8b-instruct'
+    ai_trial_daily_limit: int = 5
+    ai_premium_daily_limit: int = 50
 
 
 settings = Settings()

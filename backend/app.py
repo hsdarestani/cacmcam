@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     database_url: str = 'sqlite:///./camcam.db'
     redis_url: str = 'redis://localhost:6379/0'
     zibal_merchant: str = ''
-    starter_monthly_rial: int = 2_990_000
+    premium_monthly_rial: int = 1_990_000
     starter_yearly_rial: int = 29_900_000
     pro_monthly_rial: int = 5_990_000
     pro_yearly_rial: int = 59_900_000
@@ -168,7 +168,7 @@ class AdminUserStatusBody(BaseModel):
 
 
 class AdminSubscriptionBody(BaseModel):
-    plan: str = Field(pattern='^(starter|pro|inactive)$')
+    plan: str = Field(pattern='^(premium|starter|pro|inactive)$')
     days: int = Field(default=30, ge=1, le=3650)
 
 
@@ -253,9 +253,9 @@ def entitlement(user: User) -> dict:
     now = utcnow()
     sub = user.subscription
     if sub and sub.status == 'active' and sub.current_period_end and sub.current_period_end > now:
-        if sub.plan == 'pro':
-            return {'active': True, 'plan': 'pro', 'camera_limit': 10, 'retention_days': 30, 'until': sub.current_period_end}
-        return {'active': True, 'plan': 'starter', 'camera_limit': 3, 'retention_days': 7, 'until': sub.current_period_end}
+        # Existing starter/pro rows remain valid, but every paid account now
+        # receives the single Premium feature set.
+        return {'active': True, 'plan': 'premium', 'camera_limit': 10, 'retention_days': 30, 'until': sub.current_period_end}
     if user.trial_ends_at and user.trial_ends_at > now:
         return {'active': True, 'plan': 'trial', 'camera_limit': 1, 'retention_days': 1, 'until': user.trial_ends_at}
     return {'active': False, 'plan': 'expired', 'camera_limit': 0, 'retention_days': 0, 'until': None}
@@ -327,19 +327,13 @@ def admin_guard(request: Request, user: User = Depends(current_user)) -> User:
 
 
 PLAN_MAP = {
-    'starter_monthly': ('starter', 30, lambda: settings.starter_monthly_rial),
-    'starter_yearly': ('starter', 365, lambda: settings.starter_yearly_rial),
-    'pro_monthly': ('pro', 30, lambda: settings.pro_monthly_rial),
-    'pro_yearly': ('pro', 365, lambda: settings.pro_yearly_rial),
+    'premium_monthly': ('premium', 30, lambda: settings.premium_monthly_rial),
 }
 
 
 def public_plans() -> list[dict]:
     return [
-        {'code': 'starter_monthly', 'name': 'Starter', 'cycle': 'monthly', 'amount_rial': settings.starter_monthly_rial, 'cameras': 3, 'retention_days': 7},
-        {'code': 'starter_yearly', 'name': 'Starter', 'cycle': 'yearly', 'amount_rial': settings.starter_yearly_rial, 'cameras': 3, 'retention_days': 7},
-        {'code': 'pro_monthly', 'name': 'Pro', 'cycle': 'monthly', 'amount_rial': settings.pro_monthly_rial, 'cameras': 10, 'retention_days': 30},
-        {'code': 'pro_yearly', 'name': 'Pro', 'cycle': 'yearly', 'amount_rial': settings.pro_yearly_rial, 'cameras': 10, 'retention_days': 30},
+        {'code': 'premium_monthly', 'name': 'Premium', 'cycle': 'monthly', 'amount_rial': settings.premium_monthly_rial, 'cameras': 10, 'retention_days': 30, 'all_features': True, 'trial_days': 7},
     ]
 
 
@@ -394,7 +388,7 @@ async def security_middleware(request: Request, call_next):
     return response
 
 
-WEB = Path('/app/web')
+WEB = Path(os.getenv('WEB_DIR', '/app/web'))
 app.mount('/static', StaticFiles(directory=WEB), name='static')
 
 
