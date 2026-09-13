@@ -65,6 +65,9 @@ jobs:
           set -eu
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID secret is empty'; exit 1; }
           test -n "$CLOUDFLARE_AI_TOKEN" || { echo 'CLOUDFLARE_AI_TOKEN secret is empty'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'FIREBASE_SERVICE_ACCOUNT_B64 secret is empty'; exit 1; }
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" | base64 --decode | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('type') == 'service_account'; assert data.get('project_id'); assert data.get('client_email'); assert data.get('private_key')"
+          echo 'FIREBASE_SERVICE_ACCOUNT_B64=valid'
           TEXT_RESULT=$(curl -fsS --max-time 45 \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.1-8b-instruct-fast" \
             -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
@@ -85,6 +88,7 @@ jobs:
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER || 'root' }}
@@ -191,6 +195,7 @@ jobs:
             docker compose up -d --force-recreate caddy
             docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
             docker compose exec -T pet curl -fsS http://127.0.0.1:8020/health
+            docker compose exec -T pet python -c "import pet_push; credentials = pet_push.firebase_credentials(); assert credentials and credentials.project_id; print('CAMCAM_FIREBASE_RUNTIME=ok')"
             docker compose exec -T petarchive curl -fsS http://127.0.0.1:8030/health
 
             # Verify the real Caddy routes while bypassing DNS/CDN.
