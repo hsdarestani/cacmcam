@@ -1,0 +1,67 @@
+name: Deploy existing cacmcam secrets directly to RedNote shared VPS
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require dedicated shared VPS password and runtime credentials
+        env:
+          DEST_PASS: ${{ secrets.SHARED_VPS_PASS }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+          ZIBAL_MERCHANT: ${{ secrets.ZIBAL_MERCHANT }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+        run: |
+          test -n "$DEST_PASS"
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_AI_TOKEN"
+      - name: Configure existing staged app using this repository's GitHub secrets
+        uses: appleboy/ssh-action@v1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+          ZIBAL_MERCHANT: ${{ secrets.ZIBAL_MERCHANT }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+        with:
+          host: 143.20.60.195
+          port: 9011
+          username: root
+          password: ${{ secrets.SHARED_VPS_PASS }}
+          envs: CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_AI_TOKEN,FIREBASE_SERVICE_ACCOUNT_B64,ZIBAL_MERCHANT,ADMIN_EMAILS
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            umask 077
+            exec 9>/var/lock/pars-vds-bot-deploy.lock
+            flock -w 300 9
+            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1 ;; esac
+            test -r /opt/camcam/.env
+            python3 - <<'PY'
+            from pathlib import Path
+            import os,tempfile
+            path=Path("/opt/camcam/.env")
+            allowed=["CLOUDFLARE_ACCOUNT_ID","CLOUDFLARE_AI_TOKEN","FIREBASE_SERVICE_ACCOUNT_B64","ZIBAL_MERCHANT","ADMIN_EMAILS"]
+            existing=dict(y.split("=",1) for y in path.read_text().splitlines() if "=" in y and not y.lstrip().startswith("#"))
+            incoming={key:os.environ[key] for key in allowed if os.environ.get(key)}
+            assert incoming.get('CLOUDFLARE_ACCOUNT_ID') and incoming.get('CLOUDFLARE_AI_TOKEN')
+            for key,val in incoming.items():
+                if "\\n" in val or "\\r" in val:raise ValueError("Unexpected newline")
+            existing.update(incoming)
+            with tempfile.NamedTemporaryFile(mode="w",dir=str(path.parent),prefix=".env.next-",delete=False) as f:
+                f.write("".join(k+"="+v+"\\n" for k,v in existing.items()))
+                os.chmod(f.name,0o600)
+                tmp=f.name
+            os.replace(tmp,path)
+            print("Credentials imported (values never printed):",", ".join(sorted(incoming)))
+            PY
+            cd /opt/camcam
+            docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --no-build api pet archive petarchive
+            sleep 5
+            curl -fsS --max-time 5 http://127.0.0.1:8117/health
+            systemctl is-active --quiet rednotedownloader
+            nginx -t
+            echo "PROJECT_SECRETS_ACTIVATED"
