@@ -1,7 +1,7 @@
 """Synthetic deployment acceptance: no real camera or payment is used."""
 import asyncio, secrets, time, json, logging
 import httpx
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCRtpSender
 from av import VideoFrame
 logging.getLogger("aiortc").setLevel(logging.ERROR)
 BASE="https://camcam.smarbiz.sbs"
@@ -37,6 +37,11 @@ async def main():
         await request("POST","/api/device/heartbeat",headers={"X-Device-Id":did,"X-Device-Token":device_token})
         print("CAMERA_CREATE_PAIR_HEARTBEAT_OK",flush=True)
         pc.addTrack(Pattern())
+        # Match the production camera's preferH264 path: fMP4 cannot record VP8.
+        codecs=RTCRtpSender.getCapabilities('video').codecs
+        h264=[c for c in codecs if c.mimeType.lower()=='video/h264']
+        assert h264, 'H264_ENCODER_UNAVAILABLE'
+        pc.getTransceivers()[0].setCodecPreferences(h264)
         await pc.setLocalDescription(await pc.createOffer())
         resp=await request("POST",pair["whip_url"],headers={"Content-Type":"application/sdp","Authorization":"Basic "+__import__("base64").b64encode((did+":"+device_token).encode()).decode()},content=pc.localDescription.sdp)
         assert resp.status_code==201
