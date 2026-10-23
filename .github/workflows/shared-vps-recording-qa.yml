@@ -1,0 +1,23 @@
+name: Shared VPS real synthetic camera recording acceptance
+on:
+  push:
+    branches: [ops/shared-vps-source-audit-20261022]
+    paths: [.github/workflows/shared-vps-recording-qa.yml, scripts/shared_vps_recording_qa.py]
+permissions:
+  contents: read
+concurrency:
+  group: camcam-synthetic-recording-qa
+  cancel-in-progress: false
+jobs:
+  recording:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check aiortc==1.14.0 httpx==0.28.1
+      - run: python scripts/shared_vps_recording_qa.py
