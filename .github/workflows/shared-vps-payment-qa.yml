@@ -1,0 +1,32 @@
+name: Verify payment callback idempotency with mocked provider and disposable PostgreSQL
+on:
+  push:
+    branches: [ops/shared-vps-source-audit-20261022]
+    paths: [backend/app.py, tests/test_payment_callbacks.py, .github/workflows/shared-vps-payment-qa.yml]
+permissions:
+  contents: read
+jobs:
+  payment:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: callback_qa
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: disposable-qa-only
+        ports: ["5432:5432"]
+        options: --health-cmd="pg_isready -U qa -d callback_qa" --health-interval=5s --health-timeout=5s --health-retries=10
+    env:
+      DATABASE_URL: postgresql+psycopg://qa:disposable-qa-only@127.0.0.1:5432/callback_qa
+      REDIS_URL: redis://127.0.0.1:1/0
+      SECRET_KEY: synthetic-callback-test-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: WEB_DIR="$PWD/web" python tests/test_payment_callbacks.py -v
