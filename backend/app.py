@@ -800,13 +800,26 @@ async def payment_return(payment: str = 'failed', receipt: str = '', intent: str
         return RedirectResponse(f'{settings.base_url}/pet?payment=pending', status_code=303)
     if not data.get('ok') or data.get('status') != 'paid' or data.get('intent') != row.id:
         return RedirectResponse(f'{settings.base_url}/pet?payment=pending', status_code=303)
-    paid_toman = int(data.get('amount_toman') or 0)
+    # Refresh under a database row lock after provider I/O. Concurrent callbacks
+    # may both have read the original pending row before verification completed.
+    row = db.scalar(
+        select(Payment).where(Payment.id == intent).with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if not row:
+        return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
+    if row.activated_at:
+        return RedirectResponse(f'{settings.base_url}/pet?payment=success', status_code=303)
+    try:
+        paid_toman = int(data.get('amount_toman') or 0)
+    except (TypeError, ValueError):
+        paid_toman = -1
     if paid_toman * 10 != row.amount_rial:
         row.status = 'amount_mismatch'
         db.commit()
         return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
     plan, days, _ = PLAN_MAP[row.plan_code]
-    user = db.get(User, row.user_id)
+    user = db.scalar(select(User).where(User.id == row.user_id).with_for_update())
     if not user:
         return RedirectResponse(f'{settings.base_url}/pet?payment=failed', status_code=303)
     sub = user.subscription
