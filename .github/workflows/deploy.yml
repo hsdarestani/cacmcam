@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: camcam-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -52,180 +52,60 @@ jobs:
           fi
 
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Validate Cloudflare Workers AI credentials
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-        run: |
-          set -eu
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID secret is empty'; exit 1; }
-          test -n "$CLOUDFLARE_AI_TOKEN" || { echo 'CLOUDFLARE_AI_TOKEN secret is empty'; exit 1; }
-          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'FIREBASE_SERVICE_ACCOUNT_B64 secret is empty'; exit 1; }
-          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" | base64 --decode | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('type') == 'service_account'; assert data.get('project_id'); assert data.get('client_email'); assert data.get('private_key')"
-          echo 'FIREBASE_SERVICE_ACCOUNT_B64=valid'
-          TEXT_RESULT=$(curl -fsS --max-time 45 \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.1-8b-instruct-fast" \
-            -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data '{"messages":[{"role":"user","content":"Reply only OK"}],"max_tokens":4}')
-          printf '%s' "$TEXT_RESULT" | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('success') is True and data.get('result'), data.get('errors')"
-          VISION_RESULT=$(curl -fsS --max-time 45 \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/meta/llama-3.2-11b-vision-instruct" \
-            -H "Authorization: Bearer $CLOUDFLARE_AI_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data '{"prompt":"agree"}')
-          printf '%s' "$VISION_RESULT" | python -c "import json,sys; data=json.load(sys.stdin); assert data.get('success') is True, data.get('errors')"
-          echo 'CLOUDFLARE_WORKERS_AI=ok'
-      - name: Deploy over SSH
+      - name: Deploy only CamCam application roles on the shared VPS
         uses: appleboy/ssh-action@v1
-        env:
-          ZIBAL_MERCHANT: ${{ secrets.ZIBAL_MERCHANT }}
-          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER || 'root' }}
-          password: ${{ secrets.PASS }}
-          port: ${{ secrets.PORT || 22 }}
-          envs: ZIBAL_MERCHANT,ADMIN_EMAILS,CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_AI_TOKEN,FIREBASE_SERVICE_ACCOUNT_B64
-          command_timeout: 20m
+          host: 143.20.60.195
+          port: 9011
+          username: root
+          password: ${{ secrets.SHARED_VPS_PASS || secrets.PASS }}
+          command_timeout: 12m
           script: |
             set -eu
-            APP_DIR=/opt/camcam
-            REPO=https://github.com/hsdarestani/cacmcam.git
-            OWNER_ADMIN_EMAIL=hsdf7rb@gmail.com
-            if [ -n "${ADMIN_EMAILS:-}" ]; then
-              ADMIN_EMAILS_EFFECTIVE="$ADMIN_EMAILS,$OWNER_ADMIN_EMAIL"
-            else
-              ADMIN_EMAILS_EFFECTIVE="$OWNER_ADMIN_EMAIL"
-            fi
-
-            if ! command -v docker >/dev/null 2>&1; then
-              if command -v apt-get >/dev/null 2>&1; then
-                export DEBIAN_FRONTEND=noninteractive
-                apt-get update
-                apt-get install -y docker.io git curl openssl ca-certificates
-                apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin || true
-                systemctl enable --now docker || service docker start
-              else
-                echo 'Fresh server detected, but automatic bootstrap currently supports Debian/Ubuntu only'
-                exit 1
-              fi
-            fi
-
-            if ! command -v git >/dev/null 2>&1; then
-              apt-get update && apt-get install -y git
-            fi
-
-            if ! docker compose version >/dev/null 2>&1; then
-              apt-get update
-              apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin
-            fi
-
-            if [ ! -d "$APP_DIR/.git" ]; then
-              mkdir -p "$APP_DIR"
-              git clone "$REPO" "$APP_DIR"
-            else
-              cd "$APP_DIR"
-              git fetch origin main
-              git reset --hard origin/main
-            fi
-            cd "$APP_DIR"
-
-            PUBLIC_IP=$(curl -4fsS --max-time 10 https://api.ipify.org || true)
-            WEBRTC_HOST=${PUBLIC_IP:-camcam.smarbiz.sbs}
-
-            if [ ! -f .env ]; then
-              SECRET_KEY=$(openssl rand -hex 48)
-              DB_PASSWORD=$(openssl rand -hex 24)
-              cat > .env <<EOF
-            APP_NAME=CamCam
-            BASE_URL=https://camcam.smarbiz.sbs
-            SECRET_KEY=$SECRET_KEY
-            DB_PASSWORD=$DB_PASSWORD
-            REDIS_URL=redis://redis:6379/0
-            ZIBAL_MERCHANT=$ZIBAL_MERCHANT
-            PREMIUM_MONTHLY_RIAL=1990000
-            CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID
-            CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN
-            CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
-            CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct
-            FIREBASE_SERVICE_ACCOUNT_B64=$FIREBASE_SERVICE_ACCOUNT_B64
-            PUSH_REMINDER_MINUTES_BEFORE=15
-            AI_TRIAL_DAILY_LIMIT=5
-            AI_PREMIUM_DAILY_LIMIT=50
-            ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE
-            SECURE_COOKIES=true
-            WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST
-            EOF
-            else
-              if [ -n "${ZIBAL_MERCHANT:-}" ]; then
-                if grep -q '^ZIBAL_MERCHANT=' .env; then sed -i "s|^ZIBAL_MERCHANT=.*|ZIBAL_MERCHANT=$ZIBAL_MERCHANT|" .env; else printf '\nZIBAL_MERCHANT=%s\n' "$ZIBAL_MERCHANT" >> .env; fi
-              fi
-              if grep -q '^ADMIN_EMAILS=' .env; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$ADMIN_EMAILS_EFFECTIVE|" .env; else printf '\nADMIN_EMAILS=%s\n' "$ADMIN_EMAILS_EFFECTIVE" >> .env; fi
-              if grep -q '^PREMIUM_MONTHLY_RIAL=' .env; then sed -i 's|^PREMIUM_MONTHLY_RIAL=.*|PREMIUM_MONTHLY_RIAL=1990000|' .env; else printf '\nPREMIUM_MONTHLY_RIAL=1990000\n' >> .env; fi
-              if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-                if grep -q '^CLOUDFLARE_ACCOUNT_ID=' .env; then sed -i "s|^CLOUDFLARE_ACCOUNT_ID=.*|CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID|" .env; else printf '\nCLOUDFLARE_ACCOUNT_ID=%s\n' "$CLOUDFLARE_ACCOUNT_ID" >> .env; fi
-              fi
-              if [ -n "${CLOUDFLARE_AI_TOKEN:-}" ]; then
-                if grep -q '^CLOUDFLARE_AI_TOKEN=' .env; then sed -i "s|^CLOUDFLARE_AI_TOKEN=.*|CLOUDFLARE_AI_TOKEN=$CLOUDFLARE_AI_TOKEN|" .env; else printf '\nCLOUDFLARE_AI_TOKEN=%s\n' "$CLOUDFLARE_AI_TOKEN" >> .env; fi
-              fi
-              if [ -n "${FIREBASE_SERVICE_ACCOUNT_B64:-}" ]; then
-                if grep -q '^FIREBASE_SERVICE_ACCOUNT_B64=' .env; then sed -i "s|^FIREBASE_SERVICE_ACCOUNT_B64=.*|FIREBASE_SERVICE_ACCOUNT_B64=$FIREBASE_SERVICE_ACCOUNT_B64|" .env; else printf '\nFIREBASE_SERVICE_ACCOUNT_B64=%s\n' "$FIREBASE_SERVICE_ACCOUNT_B64" >> .env; fi
-              fi
-              if grep -q '^PUSH_REMINDER_MINUTES_BEFORE=' .env; then sed -i 's|^PUSH_REMINDER_MINUTES_BEFORE=.*|PUSH_REMINDER_MINUTES_BEFORE=15|' .env; else printf '\nPUSH_REMINDER_MINUTES_BEFORE=15\n' >> .env; fi
-              if grep -q '^CLOUDFLARE_AI_MODEL=' .env; then sed -i 's|^CLOUDFLARE_AI_MODEL=.*|CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast|' .env; else printf '\nCLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast\n' >> .env; fi
-              if grep -q '^CLOUDFLARE_VISION_MODEL=' .env; then sed -i 's|^CLOUDFLARE_VISION_MODEL=.*|CLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct|' .env; else printf '\nCLOUDFLARE_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct\n' >> .env; fi
-              if grep -q '^WEBRTC_ADDITIONAL_HOSTS=' .env; then sed -i "s|^WEBRTC_ADDITIONAL_HOSTS=.*|WEBRTC_ADDITIONAL_HOSTS=$WEBRTC_HOST|" .env; else printf '\nWEBRTC_ADDITIONAL_HOSTS=%s\n' "$WEBRTC_HOST" >> .env; fi
-            fi
-
-            chmod 600 .env
-            docker compose pull db redis mediamtx caddy
-            docker compose up -d --build --remove-orphans
-            # Validate the mounted config, then recreate Caddy so an old in-memory
-            # route table can never survive a deployment.
-            docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-            docker compose up -d --force-recreate caddy
-            docker compose exec -T api curl -fsS http://127.0.0.1:8000/health
-            docker compose exec -T pet curl -fsS http://127.0.0.1:8020/health
-            docker compose exec -T pet python -c "import pet_push; credentials = pet_push.firebase_credentials(); assert credentials and credentials.project_id; print('CAMCAM_FIREBASE_RUNTIME=ok')"
-            docker compose exec -T petarchive curl -fsS http://127.0.0.1:8030/health
-
-            # Verify the real Caddy routes while bypassing DNS/CDN.
-            LOCAL_PET=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/pet)
-            printf '%s' "$LOCAL_PET" | grep -Fq 'data-camcam-ui="pet-vnext"'
-            printf '%s' "$LOCAL_PET" | grep -Fq '/static/pet_ui.js'
-            LOCAL_CAMERA=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/camera)
-            printf '%s' "$LOCAL_CAMERA" | grep -Fq 'data-camcam-ui="camera-vnext"'
-            LOCAL_LANDING=$(curl -kfsS --resolve camcam.smarbiz.sbs:443:127.0.0.1 https://camcam.smarbiz.sbs/)
-            printf '%s' "$LOCAL_LANDING" | grep -Fq 'data-camcam-ui="landing-vnext"'
-
-            # /pet is a fresh public URL; fail if the public edge cannot expose it.
-            REV=$(date +%s)
-            PUBLIC_PET=$(curl -fsS --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
-            printf '%s' "$PUBLIC_PET" | grep -Fq 'data-camcam-ui="pet-vnext"'
-            printf '%s' "$PUBLIC_PET" | grep -Fq '/static/pet_ui.js'
-            PET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/pet?rev=$REV")
-            if printf '%s' "$PET_HEADERS" | grep -qi '^clear-site-data:'; then
-              echo 'Product entrypoint must not evict the Android WebView cache'
+            umask 077
+            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1 ;; esac
+            exec 9>/var/lock/pars-vds-bot-deploy.lock
+            flock -w 600 9
+            cd /opt/camcam
+            stamp=$(date -u +%Y%m%dT%H%M%SZ)
+            test -s .env
+            test -s docker-compose.shared-vps.yml
+            mkdir -p ".deployment-backup-$stamp"
+            cp -p .env docker-compose.shared-vps.yml Caddyfile.shared-vps ".deployment-backup-$stamp/"
+            docker exec camcam-shared-db-1 pg_dump --no-owner --no-privileges -U camcam camcam | gzip -1 > ".deployment-backup-$stamp/postgres.sql.gz"
+            previous=$(git rev-parse HEAD)
+            previous_image=$(docker inspect -f '{{.Image}}' camcam-shared-api-1)
+            git fetch origin main
+            changed=$(git diff --name-only "$previous" origin/main -- backend Dockerfile requirements.txt | wc -l)
+            git checkout --detach origin/main
+            docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml config --quiet
+            rollback() {
+              git checkout --detach "$previous"
+              cp -p ".deployment-backup-$stamp/Caddyfile.shared-vps" Caddyfile.shared-vps
+              printf 'services:\n  api:\n    image: %s\n  pet:\n    image: %s\n  archive:\n    image: %s\n  petarchive:\n    image: %s\n' "$previous_image" "$previous_image" "$previous_image" "$previous_image" > ".rollback-$stamp.yml"
+              docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml -f ".rollback-$stamp.yml" up -d --no-deps --no-build api pet archive petarchive
+              docker exec camcam-shared-gateway caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
               exit 1
+            }
+            if [ "$changed" -gt 0 ]; then
+              test "$(df -Pk / | awk 'NR==2 {print $4}')" -gt 1500000
+              docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml build api || rollback
+              docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --no-deps --no-build api pet archive petarchive || rollback
             fi
-            ASSET_HEADERS=$(curl -fsSI --max-time 20 "https://camcam.smarbiz.sbs/static/pet_ui.js?v=20260912-3")
-            printf '%s' "$ASSET_HEADERS" | grep -qi 'cache-control: public, max-age=31536000, immutable'
-            printf '%s' "$ASSET_HEADERS" | grep -qi 'x-camcam-asset: canonical-v20260912-3'
-            echo 'CAMCAM_PET_PUBLIC_SMOKE=ok'
-            echo 'CAMCAM_CAMERA_ROUTE_SMOKE=ok'
-            echo 'CAMCAM_LANDING_ROUTE_SMOKE=ok'
-            echo
-            docker compose ps
-            echo "CAMCAM_SERVER_IPV4=$PUBLIC_IP"
-            echo "CAMCAM_WEBRTC_HOST=$WEBRTC_HOST"
-            echo "CAMCAM_OWNER_ADMIN=$OWNER_ADMIN_EMAIL"
-            docker image prune -f >/dev/null 2>&1 || true
+            sed '1s/^camcam.smarbiz.sbs {/:80 {/' Caddyfile > Caddyfile.shared-vps
+            docker exec camcam-shared-gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile || rollback
+            docker exec camcam-shared-gateway caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || rollback
+            ready=0
+            for i in $(seq 1 30); do
+              if curl -fsS --max-time 4 http://127.0.0.1:8117/health >/dev/null; then ready=1;break;fi
+              sleep 2
+            done
+            [ "$ready" = 1 ] || rollback
+            curl -fsS --max-time 15 https://camcam.smarbiz.sbs/health >/dev/null || rollback
+            systemctl is-active --quiet rednotedownloader
+            nginx -t
+            echo CAMCAM_INDEPENDENT_DEPLOYMENT_OK
