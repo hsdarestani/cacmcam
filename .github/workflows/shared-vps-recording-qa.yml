@@ -20,4 +20,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --disable-pip-version-check aiortc==1.14.0 httpx==0.28.1
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: python scripts/shared_vps_recording_qa.py
