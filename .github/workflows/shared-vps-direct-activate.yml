@@ -49,10 +49,10 @@ jobs:
             incoming={key:os.environ[key] for key in allowed if os.environ.get(key)}
             assert incoming.get('CLOUDFLARE_ACCOUNT_ID') and incoming.get('CLOUDFLARE_AI_TOKEN')
             for key,val in incoming.items():
-                if "\\n" in val or "\\r" in val:raise ValueError("Unexpected newline")
+                if "\n" in val or "\r" in val:raise ValueError("Unexpected newline")
             existing.update(incoming)
             with tempfile.NamedTemporaryFile(mode="w",dir=str(path.parent),prefix=".env.next-",delete=False) as f:
-                f.write("".join(k+"="+v+"\\n" for k,v in existing.items()))
+                f.write("".join(k+"="+v+"\n" for k,v in existing.items()))
                 os.chmod(f.name,0o600)
                 tmp=f.name
             os.replace(tmp,path)
