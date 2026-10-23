@@ -1,11 +1,17 @@
 name: Deploy existing cacmcam secrets directly to RedNote shared VPS
 on:
   workflow_dispatch:
+  push:
+    branches: [ops/shared-vps-source-audit-20261022]
+    paths: [.github/workflows/shared-vps-direct-activate.yml]
+concurrency:
+  group: camcam-shared-vps-activate
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
   activate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require dedicated shared VPS password and runtime credentials
         env:
@@ -40,6 +46,7 @@ jobs:
             flock -w 300 9
             case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1 ;; esac
             test -r /opt/camcam/.env
+            cp -p /opt/camcam/.env /opt/camcam/.env.before-activation-$(date -u +%Y%m%dT%H%M%SZ)
             python3 - <<'PY'
             from pathlib import Path
             import os,tempfile
@@ -59,7 +66,8 @@ jobs:
             print("Credentials imported (values never printed):",", ".join(sorted(incoming)))
             PY
             cd /opt/camcam
-            docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --no-build api pet archive petarchive
+            docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml config --quiet
+            docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --no-deps --no-build api pet archive petarchive
             sleep 5
             curl -fsS --max-time 5 http://127.0.0.1:8117/health
             systemctl is-active --quiet rednotedownloader
