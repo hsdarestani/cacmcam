@@ -73,7 +73,7 @@ function injectStyle(){
     border-radius:22px!important;background:rgba(255,253,250,.92)!important;border:1px solid rgba(255,255,255,.92)!important;backdrop-filter:blur(22px);box-shadow:0 18px 38px rgba(18,45,41,.13)!important}
   .talk{width:100%;min-height:64px!important;border-radius:17px!important;background:linear-gradient(135deg,var(--cc-brand),var(--cc-brand-2))!important;
     box-shadow:0 11px 24px rgba(11,111,105,.22)!important;font-size:13px!important;position:relative;overflow:hidden}
-  .talk:after{content:'نگه دار';position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:8px;font-weight:700;opacity:.7;border:1px solid rgba(255,255,255,.25);padding:4px 7px;border-radius:999px}
+  .talk:after{content:'لمس کن';position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:8px;font-weight:700;opacity:.7;border:1px solid rgba(255,255,255,.25);padding:4px 7px;border-radius:999px}
   .talk.active{background:linear-gradient(135deg,#9d3e50,#cf6674)!important}.talk.active:after{content:'در حال ارسال صدا'}
 
   .controls{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px!important}
@@ -797,46 +797,64 @@ async function ccAcquireMic(){
   throw last||new Error('میکروفن شروع نشد');
 }
 
+// Tap-to-talk: do not tear down an in-flight WHIP negotiation on pointer-up.
+// A second tap ends the session; this works with long signaling delays on mobile.
+let ccTalkConnectionTimer=null;
+function ccTalkButton(active=false,message){
+  const b=document.getElementById('talk');
+  if(!b)return;
+  b.classList.toggle('active',active);
+  b.setAttribute('aria-pressed',String(active));
+  b.textContent=message||(active?'🎙 در حال صحبت · برای توقف لمس کن':'🎙 لمس کن و صحبت کن');
+}
+function ccDeleteTalkResource(url){
+  if(!url)return;
+  fetch(url,{method:'DELETE'}).catch(()=>{});
+}
 async function ccStartTalk(e){
-  if(!activeId||activeDevice?.access==='viewer'||talkPC||ccTalkBusy)return;
   e?.preventDefault();
+  if(!activeId||activeDevice?.access==='viewer')return;
+  if(ccTalkHeld||talkPC){await ccStopTalk();return;}
+  // Do not overlap microphone acquisition from a cancelled attempt.
+  if(ccTalkBusy)return;
   ccTalkHeld=true;
   ccTalkBusy=true;
   const generation=++ccTalkGeneration;
   const deviceId=activeId;
-  const b=document.getElementById('talk');
-  if(b){b.classList.add('active');b.textContent='در حال آماده‌سازی میکروفن…'}
-  const ensureHeld=()=>{
-    if(!ccTalkHeld||generation!==ccTalkGeneration||activeId!==deviceId)throw ccCancelled();
-  };
-
+  let localStream=null,localPeer=null,localResource=null;
+  const current=()=>ccTalkHeld&&generation===ccTalkGeneration&&activeId===deviceId;
+  const ensureCurrent=()=>{if(!current())throw ccCancelled()};
+  ccTalkButton(true,'در حال آماده‌سازی صدا…');
   try{
     if(!await ccNativeMicPermission())throw new Error('اجازه میکروفن داده نشد');
-    ensureHeld();
+    ensureCurrent();
     ccPauseRemoteAudio();
-    talkStream=await ccAcquireMic();
-    ensureHeld();
+    localStream=await ccAcquireMic();
+    ensureCurrent();
+    talkStream=localStream;
 
-    await api(`/api/pet/devices/${deviceId}/talk-wake`,{method:'POST'}).catch(()=>{});
-    ensureHeld();
-    const auth=await api(`/api/pet/devices/${deviceId}/talk-token`,{method:'POST'});
-    ensureHeld();
+    await api('/api/pet/devices/'+deviceId+'/talk-wake',{method:'POST'}).catch(()=>{});
+    ensureCurrent();
+    const auth=await api('/api/pet/devices/'+deviceId+'/talk-token',{method:'POST'});
+    ensureCurrent();
 
     const p=newPeer();
+    localPeer=p;
     talkPC=p;
-    talkStream.getAudioTracks().forEach(t=>p.addTrack(t,talkStream));
+    localStream.getAudioTracks().forEach(track=>p.addTrack(track,localStream));
     const offer=await p.createOffer();
-    ensureHeld();
+    ensureCurrent();
     await p.setLocalDescription(offer);
     await waitIce(p);
-    ensureHeld();
+    ensureCurrent();
+    if(p.signalingState==='closed')throw ccCancelled();
 
     const controller=new AbortController();
     ccTalkAbort=controller;
     const timeout=setTimeout(()=>controller.abort(),15000);
-    let r;
+    let response;
     try{
-      r=await fetch(auth.whip_url,{
+      response=await fetch(auth.whip_url,{
         method:'POST',
         headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},
         body:p.localDescription.sdp,
@@ -846,58 +864,103 @@ async function ccStartTalk(e){
       clearTimeout(timeout);
       if(ccTalkAbort===controller)ccTalkAbort=null;
     }
-    ensureHeld();
-    if(!r.ok)throw new Error('مسیر صحبت برقرار نشد ('+r.status+')');
-    talkResource=r.headers.get('Location');
-
-    // Important: read the SDP first, then check whether pointer-up cancelled
-    // this generation. Previously pointer-up could close p during r.text(), and
-    // setRemoteDescription() then threw signalingState=closed.
-    const answer=await r.text();
-    ensureHeld();
+    // A cancelled request may still have created a WHIP resource on the server.
+    localResource=response.headers.get('Location');
+    if(!current()){
+      ccDeleteTalkResource(localResource);
+      localResource=null;
+      throw ccCancelled();
+    }
+    if(!response.ok)throw new Error('مسیر صحبت برقرار نشد ('+response.status+')');
+    talkResource=localResource;
+    const answer=await response.text();
+    ensureCurrent();
     if(p.signalingState==='closed')throw ccCancelled();
-    await p.setRemoteDescription({type:'answer',sdp:answer});
-    ensureHeld();
-    if(b)b.textContent='🎙 در حال صحبت…';
+    try{await p.setRemoteDescription({type:'answer',sdp:answer})}
+    catch(error){
+      if(p.signalingState==='closed')throw ccCancelled();
+      throw error;
+    }
+    ensureCurrent();
+    ccTalkButton(true,'در حال اتصال صوت…');
+    const update=()=>{
+      if(!current()||talkPC!==p)return;
+      const state=p.connectionState;
+      if(state==='connected'){
+        clearTimeout(ccTalkConnectionTimer);
+        ccTalkButton(true,'🎙 در حال صحبت · برای توقف لمس کن');
+      }else if(state==='failed'||state==='closed'){
+        toast('ارتباط صوتی قطع شد. دوباره روی صحبت بزن.');
+        ccStopTalk();
+      }else if(state==='disconnected'){
+        clearTimeout(ccTalkConnectionTimer);
+        ccTalkConnectionTimer=setTimeout(()=>{
+          if(current()&&talkPC===p&&p.connectionState==='disconnected'){
+            toast('ارتباط صوتی قطع شد. دوباره روی صحبت بزن.');
+            ccStopTalk();
+          }
+        },4500);
+      }
+    };
+    p.onconnectionstatechange=update;
+    ccTalkConnectionTimer=setTimeout(()=>{
+      if(current()&&talkPC===p&&p.connectionState!=='connected'){
+        toast('اتصال صدا کامل نشد. دوباره تلاش کن.');
+        ccStopTalk();
+      }
+    },15000);
+    update();
   }catch(err){
-    const cancelled=err?.ccCancelled||err?.name==='AbortError'||
-      (err?.name==='InvalidStateError'&&talkPC?.signalingState==='closed');
+    const cancelled=err?.ccCancelled||!current()||
+      (err?.name==='InvalidStateError'&&localPeer?.signalingState==='closed');
     if(!cancelled){
       const raw=String(err?.message||err||'خطای نامشخص');
-      const msg=/audio source|منبع صوتی اندروید/i.test(raw)
-        ? 'میکروفن اندروید باز نشد؛ نسخه جدید اپ مجوز صوتی WebRTC را اصلاح می‌کند.'
-        : 'میکروفن شروع نشد: '+raw;
-      toast(msg);
+      const message=/audio source|منبع صوتی اندروید/i.test(raw)
+        ? 'میکروفن گوشی باز نشد؛ دسترسی میکروفن را بررسی کن.'
+        : err?.name==='AbortError'
+          ? 'ارتباط صوتی به‌موقع برقرار نشد؛ دوباره تلاش کن.'
+          : 'صدا متصل نشد: '+raw;
+      toast(message);
     }
-    await ccStopTalk();
-  }finally{ccTalkBusy=false}
+    // Only the generation that still owns the session may reset global state.
+    if(generation===ccTalkGeneration)await ccStopTalk();
+  }finally{
+    if(localStream&&localStream!==talkStream)try{localStream.getTracks().forEach(t=>t.stop())}catch{}
+    if(localPeer&&localPeer!==talkPC)try{localPeer.close()}catch{}
+    if(localResource&&localResource!==talkResource)ccDeleteTalkResource(localResource);
+    ccTalkBusy=false;
+    if(!ccTalkHeld)ccTalkButton(false);
+  }
 }
-
 async function ccStopTalk(){
   ccTalkHeld=false;
   ccTalkGeneration++;
+  clearTimeout(ccTalkConnectionTimer);
+  ccTalkConnectionTimer=null;
   try{ccTalkAbort?.abort()}catch{}
   ccTalkAbort=null;
-  const b=document.getElementById('talk');
-  if(b){b.classList.remove('active');b.textContent='🎙 نگه دار و صحبت کن'}
-  try{talkStream?.getTracks?.().forEach(t=>t.stop())}catch{}
-  talkStream=null;
-  try{talkPC?.close()}catch{}
-  talkPC=null;
-  if(talkResource){try{await fetch(talkResource,{method:'DELETE'})}catch{}talkResource=null}
+  ccTalkButton(false);
+  const stream=talkStream,peer=talkPC,resource=talkResource;
+  talkStream=null;talkPC=null;talkResource=null;
+  try{peer?.close()}catch{}
+  try{stream?.getTracks?.().forEach(t=>t.stop())}catch{}
+  ccDeleteTalkResource(resource);
   ccNativeRelease();
   ccRestoreRemoteAudio();
-  ccTalkBusy=false;
 }
-
+// Replace legacy press/release listeners, which previously closed the peer while
+// setRemoteDescription was still processing an asynchronous server answer.
 const oldTalk=document.getElementById('talk');
 if(oldTalk){
   const fresh=oldTalk.cloneNode(true);
   oldTalk.parentNode.replaceChild(fresh,oldTalk);
-  fresh.addEventListener('pointerdown',ccStartTalk,{passive:false});
-  ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(name=>fresh.addEventListener(name,ccStopTalk,{passive:true}));
+  fresh.addEventListener('click',ccStartTalk);
+  ccTalkButton(false);
 }
 try{startTalk=ccStartTalk;stopTalk=ccStopTalk}catch{}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&ccTalkHeld)ccStopTalk();
+});
 
 // ---- Command channel ---------------------------------------------------------
 async function ccCommand(type,value){
