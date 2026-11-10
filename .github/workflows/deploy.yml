@@ -33,6 +33,8 @@ jobs:
           node --check /tmp/admin.html.js
           node --check /tmp/pet.html.js
           node --check /tmp/pet_camera.html.js
+          node --check web/pet_runtime.js
+          node --check web/pet_camera_runtime.js
       - name: Build and smoke-import application
         run: |
           docker build -t camcam-ci .
