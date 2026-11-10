@@ -35,6 +35,7 @@ jobs:
           node --check /tmp/pet_camera.html.js
           node --check web/pet_runtime.js
           node --check web/pet_camera_runtime.js
+          node tests/test_pet_talk_runtime.js
       - name: Build and smoke-import application
         run: |
           docker build -t camcam-ci .
