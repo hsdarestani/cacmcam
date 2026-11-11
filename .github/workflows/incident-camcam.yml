@@ -1,4 +1,4 @@
-name: CamCam Targeted Recording Inspection
+name: CamCam Archive Retention Recovery
 on:
   push:
     branches: [ops/camcam-incident-20261111]
@@ -7,30 +7,29 @@ on:
 permissions:
   contents: read
 jobs:
-  inspect:
+  recover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Check mounted camera archive and host disk without writes
+      - name: Set CamCam MediaMTX retention to 12h and restart its recorder
         uses: appleboy/ssh-action@v1
         with:
           host: 143.20.60.195
           port: 9011
           username: root
           password: ${{ secrets.SHARED_VPS_PASS || secrets.PASS }}
-          command_timeout: 2m
+          command_timeout: 4m
           script: |
             set -eu
             case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1;; esac
-            echo "=== ARCHIVE MOUNT ==="
-            docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Type}}|{{.Name}}|{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1
-            src=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1)
-            if [ -d "$src/cam" ]; then
-              du -sh "$src" "$src/cam" || true
-              echo "=== OLD FILE COUNT ==="
-              find "$src/cam" -xdev -type f -mmin +720 -printf '.' | wc -c
-              echo "=== MOST RECENT SEGMENTS ==="
-              find "$src/cam" -xdev -type f -printf '%TY-%Tm-%Td %TH:%TM %s %p\n' | sort -r | head -n 5 || true
-            fi
-            echo "=== CAMCAM BACKUPS ==="; du -sh /opt/camcam/.deployment-backup-* 2>/dev/null | tail -n 10 || true
-            echo "=== HOST USE ==="; df -h /
+            cd /opt/camcam
+            test -f mediamtx.yml
+            grep -q 'recordDeleteAfter: 31d' mediamtx.yml
+            sed -i 's/recordDeleteAfter: 31d/recordDeleteAfter: 12h/' mediamtx.yml
+            echo "=== CONFIGURATION ==="
+            grep 'recordDeleteAfter:' mediamtx.yml
+            docker restart camcam-shared-mediamtx-1
+            echo "=== DISK ==="
+            df -h /
+            echo "=== POSTGRES ==="
+            docker exec camcam-shared-db-1 pg_isready -U camcam -d camcam || true
