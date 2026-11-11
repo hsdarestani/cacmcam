@@ -266,9 +266,9 @@ def entitlement(user: User) -> dict:
     if sub and sub.status == 'active' and sub.current_period_end and sub.current_period_end > now:
         # Existing starter/pro rows remain valid, but every paid account now
         # receives the single Premium feature set.
-        return {'active': True, 'plan': 'premium', 'camera_limit': 10, 'retention_days': 30, 'until': sub.current_period_end}
+        return {'active': True, 'plan': 'premium', 'camera_limit': 10, 'retention_days': 0.5, 'until': sub.current_period_end}
     if user.trial_ends_at and user.trial_ends_at > now:
-        return {'active': True, 'plan': 'trial', 'camera_limit': 1, 'retention_days': 1, 'until': user.trial_ends_at}
+        return {'active': True, 'plan': 'trial', 'camera_limit': 1, 'retention_days': 0.5, 'until': user.trial_ends_at}
     return {'active': False, 'plan': 'expired', 'camera_limit': 0, 'retention_days': 0, 'until': None}
 
 
@@ -349,24 +349,19 @@ def public_plans() -> list[dict]:
 
 
 async def cleanup_recordings() -> None:
+    # A fixed 12-hour window for every camera, independent of database
+    # availability and subscription plan. MediaMTX enforces the same window.
     root = record_root()
     while True:
         try:
-            with SessionLocal() as db:
-                devices = db.scalars(select(Device)).all()
-                now = utcnow().timestamp()
-                for device in devices:
-                    owner = db.get(User, device.owner_id)
-                    days = max(1, entitlement(owner)['retention_days']) if owner else 1
-                    cutoff = now - days * 86400
-                    folder = root / device.id
-                    if folder.exists():
-                        for file in folder.rglob('*'):
-                            if file.is_file() and file.stat().st_mtime < cutoff:
-                                file.unlink(missing_ok=True)
+            cutoff = utcnow().timestamp() - 12 * 60 * 60
+            if root.is_dir():
+                for file in root.rglob('*'):
+                    if file.is_file() and file.stat().st_mtime < cutoff:
+                        file.unlink(missing_ok=True)
         except Exception as exc:
             print('retention cleanup failed:', exc)
-        await asyncio.sleep(3600)
+        await asyncio.sleep(600)
 
 
 @asynccontextmanager
