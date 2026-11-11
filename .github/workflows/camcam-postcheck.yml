@@ -1,0 +1,35 @@
+name: CamCam Post-Recovery Read-Only Checks
+on:
+  push:
+    branches: [ops/camcam-postfix-check-20261111]
+    paths: [.github/workflows/camcam-postcheck.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify CamCam archive, disk and database
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 143.20.60.195
+          port: 9011
+          username: root
+          password: ${{ secrets.SHARED_VPS_PASS || secrets.PASS }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1;; esac
+            echo "=== DISK FREE ==="
+            df -h /
+            echo "=== ARCHIVE RETENTION ==="
+            grep 'recordDeleteAfter:' /opt/camcam/mediamtx.yml
+            echo "=== ARCHIVE SIZE ==="
+            du -sh /var/lib/docker/volumes/camcam-shared_recordings/_data/cam
+            echo "=== OLD FILES ==="
+            find /var/lib/docker/volumes/camcam-shared_recordings/_data/cam -xdev -type f -mmin +720 -printf '.' | wc -c
+            echo "=== DB READY ==="
+            docker exec camcam-shared-db-1 pg_isready -U camcam -d camcam
+            echo "=== API STATUS ==="
+            curl -fsS --max-time 8 http://127.0.0.1:8117/health
