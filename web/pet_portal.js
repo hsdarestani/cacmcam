@@ -1,5 +1,5 @@
 (()=>{
-const P={me:null,devices:[],active:null,page:'home',dash:null,items:[],today:null,health:[],gallery:[],galleryFilter:'all',watch:null,watchPending:null,watchMedia:null,watchRetry:null,watchAbort:null,watchBusy:false,watchGeneration:0,watchWanted:false,talk:null,talkStream:null,torch:false,lowPower:false,manual:null,onboardingShown:false,onboardingStep:0};
+const P={me:null,devices:[],active:null,page:'home',dash:null,items:[],today:null,health:[],gallery:[],galleryFilter:'all',watch:null,watchPending:null,watchMedia:null,watchRetry:null,watchAbort:null,watchBusy:false,watchGeneration:0,watchWanted:false,talk:null,talkStream:null,talkBusy:false,talkGeneration:0,talkAbort:null,talkResource:null,talkTimer:null,talkMutedBefore:null,torch:false,lowPower:false,manual:null,onboardingShown:false,onboardingStep:0};
 const q=id=>document.getElementById(id),safe=s=>esc(s),fa=n=>Number(n||0).toLocaleString('fa-IR');
 const icons={vaccination:'💉',medication:'💊',appointment:'🩺',grooming:'✂️',nutrition:'🥣',document:'📄',reminder:'🔔'};
 const labels={vaccination:'واکسن',medication:'دارو',appointment:'دامپزشک',grooming:'نظافت',nutrition:'تغذیه',document:'مدارک',reminder:'یادآور'};
@@ -74,7 +74,7 @@ function active(){return P.devices.find(x=>x.id===P.active)}
 function nav(){return [['home','⌂','امروز'],['care','✓','مراقبت'],['gallery','▦','گالری'],['health','♡','سلامت'],['medical','✚','پرونده پزشکی'],['camera','◉','دوربین'],['ai','✦','دستیار هوشمند'],['family','♧','خانواده'],['notifications','🔔','اعلان‌ها'],['profile','⚙','پروفایل'],['subscription','★','اشتراک'],['onboarding','؟','راهنمای شروع']]}
 function mobileNav(){const primary=[['home','⌂','امروز'],['care','✓','مراقبت'],['camera','◉','دوربین'],['ai','✦','هوش مصنوعی']],secondary=['gallery','health','medical','family','notifications','profile','subscription','onboarding'];return primary.map(x=>`<button class="${P.page===x[0]?'active':''}" onclick="portalPage('${x[0]}')"><b>${x[1]}</b>${x[2]}</button>`).join('')+`<button class="${secondary.includes(P.page)?'active':''}" onclick="portalMore()"><b>☰</b>بیشتر</button>`}
 function trialDays(){const until=P.me?.entitlement?.until;if(!until)return 0;return Math.max(0,Math.ceil((new Date(until)-new Date())/86400000))}
-function frame(){if(P.watch||P.watchPending||P.watchBusy)portalReleaseWatch(true);const pet=active(),paid=P.me.entitlement?.plan==='premium';q('app').classList.remove('hidden');q('app').innerHTML=`<div class="pc-app"><div class="pc-shell"><header class="pc-top"><div class="pc-brand"><i>🐾</i><span>CamCam Care<small class="pc-muted" style="display:block">همراه زندگی پت</small></span></div><div><button class="pc-btn pc-plan-pill" onclick="portalPage('subscription')">${paid?'★ پریمیوم':`نسخه آزمایشی · ${fa(trialDays())} روز`}</button> <button class="pc-btn danger" onclick="portalLogout()">خروج</button></div></header><div class="pc-layout"><aside class="pc-side"><div class="pc-pets">${P.devices.map(d=>`<button class="pc-pet ${d.id===P.active?'active':''}" onclick="portalPet('${d.id}')">${safe(d.pet?.pet_name||d.name)}</button>`).join('')}</div><nav class="pc-nav">${nav().map(x=>`<button class="${P.page===x[0]?'active':''}" onclick="${x[0]==='onboarding'?'portalOnboarding(0)':`portalPage('${x[0]}')`}">${x[1]} &nbsp; ${x[2]}</button>`).join('')}</nav><div class="pc-side-foot">${safe(P.me.email)}<br>اطلاعات هر پت جدا و امن نگهداری می‌شود.</div></aside><main class="pc-main"><div id="pcView"></div></main></div></div><nav class="pc-mobile-nav">${mobileNav()}</nav><div id="pcOnboarding"></div></div>`;render();if(!P.onboardingShown&&!localStorage.getItem(`camcam_onboarding_v2_${P.me.id}`)){P.onboardingShown=true;setTimeout(()=>portalOnboarding(0),120)}}
+function frame(){window.portalTalkStop?.();if(P.watch||P.watchPending||P.watchBusy)portalReleaseWatch(true);const pet=active(),paid=P.me.entitlement?.plan==='premium';q('app').classList.remove('hidden');q('app').innerHTML=`<div class="pc-app"><div class="pc-shell"><header class="pc-top"><div class="pc-brand"><i>🐾</i><span>CamCam Care<small class="pc-muted" style="display:block">همراه زندگی پت</small></span></div><div><button class="pc-btn pc-plan-pill" onclick="portalPage('subscription')">${paid?'★ پریمیوم':`نسخه آزمایشی · ${fa(trialDays())} روز`}</button> <button class="pc-btn danger" onclick="portalLogout()">خروج</button></div></header><div class="pc-layout"><aside class="pc-side"><div class="pc-pets">${P.devices.map(d=>`<button class="pc-pet ${d.id===P.active?'active':''}" onclick="portalPet('${d.id}')">${safe(d.pet?.pet_name||d.name)}</button>`).join('')}</div><nav class="pc-nav">${nav().map(x=>`<button class="${P.page===x[0]?'active':''}" onclick="${x[0]==='onboarding'?'portalOnboarding(0)':`portalPage('${x[0]}')`}">${x[1]} &nbsp; ${x[2]}</button>`).join('')}</nav><div class="pc-side-foot">${safe(P.me.email)}<br>اطلاعات هر پت جدا و امن نگهداری می‌شود.</div></aside><main class="pc-main"><div id="pcView"></div></main></div></div><nav class="pc-mobile-nav">${mobileNav()}</nav><div id="pcOnboarding"></div></div>`;render();if(!P.onboardingShown&&!localStorage.getItem(`camcam_onboarding_v2_${P.me.id}`)){P.onboardingShown=true;setTimeout(()=>portalOnboarding(0),120)}}
 async function load(){if(!P.active)return;const id=P.active;activeId=id;activeDevice=P.devices.find(x=>x.id===id);const [dash,items,today,health,gallery]=await Promise.all([api(`/api/pet/devices/${id}/management/dashboard`),api(`/api/pet/devices/${id}/management/items`),api(`/api/pet/devices/${id}/care/today?local_date=${new Date().toISOString().slice(0,10)}`),api(`/api/pet/devices/${id}/health-logs`),api(`/api/pet/devices/${id}/gallery`)]);P.dash=dash;P.items=items;P.today=today;P.health=health;P.gallery=gallery}
 window.portalBoot=async()=>{try{P.me=await api('/api/me');P.devices=await api('/api/pet/devices');P.active=P.active&&P.devices.some(x=>x.id===P.active)?P.active:P.devices[0]?.id||null;await load();q('landing').classList.add('hidden');frame();setTimeout(portalEnableNativePush,300)}catch(e){if(e.status===401){q('landing').classList.remove('hidden');q('app').classList.add('hidden')}else toast(e.message)}};
 window.boot=window.portalBoot;
@@ -95,7 +95,7 @@ function mediaCard(x){const visual=x.media_type==='video'?`<video src="${safe(x.
 function gallery(){const visible=P.galleryFilter==='all'?P.gallery:P.gallery.filter(x=>x.category===P.galleryFilter);return head('گالری خاطرات','عکس و فیلم‌ها خودکار دسته‌بندی می‌شوند',`<button class="pc-btn primary" onclick="portalOpenUpload()">＋ افزودن عکس یا فیلم</button>`)+`<div class="pc-gallery-intro"><div><b>✦ مرتب‌سازی هوشمند</b><span>Cloudflare AI عکس‌ها را بر اساس فعالیت دسته‌بندی می‌کند؛ هر زمان خواستی می‌توانی دسته را تغییر بدهی.</span></div><strong>${fa(P.gallery.length)} خاطره</strong></div><div class="pc-tabs pc-gallery-tabs">${Object.entries(galleryLabels).map(([key,value])=>`<button class="pc-btn ${P.galleryFilter===key?'primary':''}" onclick="portalGalleryFilter('${key}')">${value}</button>`).join('')}</div>${visible.length?`<div class="pc-gallery-grid">${visible.map(mediaCard).join('')}</div>`:'<div class="pc-card pc-empty">در این دسته هنوز عکس یا ویدئویی نیست.</div>'}`}
 function health(){return head('سلامت و رشد','وزن، علائم، اشتها، آب و سابقه پزشکی',`<button class="pc-btn primary" onclick="portalHealth()">＋ ثبت سلامت</button>`)+`<div class="pc-grid"><section class="pc-card pc-full"><div class="pc-list">${P.health.map(x=>`<div class="pc-item"><div class="pc-icon">♡</div><div class="pc-grow"><b>${safe(x.value||labels[x.kind]||x.kind)}</b><small>${safe(x.note||'بدون یادداشت')} · ${date(x.happened_at)}</small></div></div>`).join('')||'<div class="pc-empty">هنوز سابقه سلامتی ثبت نشده.</div>'}</div></section></div>`}
 function medical(){const categories=['vaccination','medication','appointment','document','grooming','nutrition','reminder'];return head('پرونده و یادآورها','واکسن، دارو، نوبت، مدارک، تغذیه و نظافت',`<button class="pc-btn primary" onclick="portalAddItem()">＋ مورد جدید</button>`)+`<div class="pc-tabs">${categories.map(c=>`<button class="pc-btn" onclick="portalFilter('${c}')">${icons[c]} ${labels[c]}</button>`).join('')}</div><div class="pc-card"><div id="pcItems" class="pc-list">${P.items.filter(x=>!x.completed_at).map(itemRow).join('')||'<div class="pc-empty">موردی ثبت نشده.</div>'}</div></div>`}
-function camera(){const d=active();if(!d)return head('دوربین و ارتباط','برای شروع یک دوربین اضافه کن',`<button class="pc-btn primary" onclick="portalAddCamera()">＋ افزودن دوربین</button>`)+`<div class="pc-card pc-empty"><b>هنوز دوربینی اضافه نشده.</b><br><br><button class="pc-btn primary" onclick="portalAddCamera()">افزودن اولین دوربین</button></div>`;const owner=d.access==='owner';return head('دوربین و ارتباط','کنترل کامل، با دسترسی ساده و مرحله‌ای',`<div class="pc-actions">${owner?'<button class="pc-btn" onclick="portalPairCode()">🔗 کد اتصال</button>':''}<button class="pc-btn primary" onclick="portalAddCamera()">＋ دوربین جدید</button></div>`)+`${owner?`<section class="pc-card" style="margin-bottom:12px"><div class="pc-section-title"><div><h3>اتصال گوشی دوربین</h3><span class="pc-muted">برای وصل کردن گوشی کنار پت، یک کد ۸ رقمی یک‌بارمصرف بگیر.</span></div><button class="pc-btn primary" onclick="portalPairCode()">دریافت کد اتصال</button></div></section>`:''}<div class="pc-grid"><section class="pc-card pc-wide"><div class="pc-video-wrap"><video id="liveVideo" class="pc-video" autoplay playsinline controls></video><span id="pcCamBadge" class="pc-cam-badge">${d.online?'● آنلاین':'● آفلاین'}</span></div><div id="pcCamState" class="pc-muted" style="margin-top:8px">${d.online?'برای دیدن تصویر، پخش زنده را شروع کن':'دوربین آفلاین است'}</div><div class="pc-cam-primary"><button class="pc-btn primary" onclick="portalWatch()">▶ پخش زنده</button><button id="pcTalk" class="pc-btn gold" onpointerdown="portalTalkStart(event)" onpointerup="portalTalkStop()" onpointercancel="portalTalkStop()" onpointerleave="portalTalkStop()">🎙 نگه‌دار و صحبت کن</button><button id="pcManual" class="pc-btn" onclick="portalManual()">⏺ ضبط دستی</button></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><div><h3>${safe(d.pet?.pet_name||d.name)}</h3><span class="pc-muted">کنترل‌های سریع</span></div><span id="pcBattery" class="pc-cam-battery">—</span></div><div class="pc-cam-controls"><button id="pcTorch" onclick="portalToggle('torch')">🔦<span>چراغ</span></button><button onclick="portalCommand('camera','switch')">🔄<span>تعویض دوربین</span></button><button id="pcLow" onclick="portalToggle('low_power')">🌙<span>کم‌مصرف</span></button><button onclick="portalRefreshCamera()">↻<span>تازه‌سازی</span></button></div><details class="pc-advanced"><summary>کنترل‌های بیشتر</summary><div class="pc-field"><label>زوم <b id="pcZoomValue">1.0×</b></label><input id="pcZoom" type="range" min="1" max="8" step="0.1" value="1" oninput="pcZoomValue.textContent=Number(this.value).toFixed(1)+'×'" onchange="portalCommand('zoom',Number(this.value))"></div><div class="pc-field"><label>کیفیت تصویر</label><select id="pcQuality" onchange="portalCommand('quality',this.value)"><option>360p</option><option selected>720p</option><option>1080p</option></select></div><div class="pc-phrases"><button class="pc-btn" onclick="portalCommand('say','بیا پیشم')">🔊 بیا پیشم</button><button class="pc-btn" onclick="portalCommand('say','نه عزیزم')">🔊 نه عزیزم</button><button class="pc-btn" onclick="portalCommand('say','غذات آماده‌ست')">🔊 غذات آماده‌ست</button></div></details></section><section class="pc-card pc-wide"><div class="pc-section-title"><h3>رویدادهای اخیر</h3><button class="pc-btn" onclick="portalCameraLoad()">تازه‌سازی</button></div><div id="pcCamEvents" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><h3>آرشیو و کلیپ‌ها</h3></div><div id="pcCamArchive" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section></div>`}
+function camera(){const d=active();if(!d)return head('دوربین و ارتباط','برای شروع یک دوربین اضافه کن',`<button class="pc-btn primary" onclick="portalAddCamera()">＋ افزودن دوربین</button>`)+`<div class="pc-card pc-empty"><b>هنوز دوربینی اضافه نشده.</b><br><br><button class="pc-btn primary" onclick="portalAddCamera()">افزودن اولین دوربین</button></div>`;const owner=d.access==='owner';return head('دوربین و ارتباط','کنترل کامل، با دسترسی ساده و مرحله‌ای',`<div class="pc-actions">${owner?'<button class="pc-btn" onclick="portalPairCode()">🔗 کد اتصال</button>':''}<button class="pc-btn primary" onclick="portalAddCamera()">＋ دوربین جدید</button></div>`)+`${owner?`<section class="pc-card" style="margin-bottom:12px"><div class="pc-section-title"><div><h3>اتصال گوشی دوربین</h3><span class="pc-muted">برای وصل کردن گوشی کنار پت، یک کد ۸ رقمی یک‌بارمصرف بگیر.</span></div><button class="pc-btn primary" onclick="portalPairCode()">دریافت کد اتصال</button></div></section>`:''}<div class="pc-grid"><section class="pc-card pc-wide"><div class="pc-video-wrap"><video id="liveVideo" class="pc-video" autoplay playsinline controls></video><span id="pcCamBadge" class="pc-cam-badge">${d.online?'● آنلاین':'● آفلاین'}</span></div><div id="pcCamState" class="pc-muted" style="margin-top:8px">${d.online?'برای دیدن تصویر، پخش زنده را شروع کن':'دوربین آفلاین است'}</div><div class="pc-cam-primary"><button class="pc-btn primary" onclick="portalWatch()">▶ پخش زنده</button><button id="pcTalk" class="pc-btn gold" onclick="portalTalkToggle(event)" aria-pressed="false">🎙 لمس کن و صحبت کن</button><button id="pcManual" class="pc-btn" onclick="portalManual()">⏺ ضبط دستی</button></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><div><h3>${safe(d.pet?.pet_name||d.name)}</h3><span class="pc-muted">کنترل‌های سریع</span></div><span id="pcBattery" class="pc-cam-battery">—</span></div><div class="pc-cam-controls"><button id="pcTorch" onclick="portalToggle('torch')">🔦<span>چراغ</span></button><button onclick="portalCommand('camera','switch')">🔄<span>تعویض دوربین</span></button><button id="pcLow" onclick="portalToggle('low_power')">🌙<span>کم‌مصرف</span></button><button onclick="portalRefreshCamera()">↻<span>تازه‌سازی</span></button></div><details class="pc-advanced"><summary>کنترل‌های بیشتر</summary><div class="pc-field"><label>زوم <b id="pcZoomValue">1.0×</b></label><input id="pcZoom" type="range" min="1" max="8" step="0.1" value="1" oninput="pcZoomValue.textContent=Number(this.value).toFixed(1)+'×'" onchange="portalCommand('zoom',Number(this.value))"></div><div class="pc-field"><label>کیفیت تصویر</label><select id="pcQuality" onchange="portalCommand('quality',this.value)"><option>360p</option><option selected>720p</option><option>1080p</option></select></div><div class="pc-phrases"><button class="pc-btn" onclick="portalCommand('say','بیا پیشم')">🔊 بیا پیشم</button><button class="pc-btn" onclick="portalCommand('say','نه عزیزم')">🔊 نه عزیزم</button><button class="pc-btn" onclick="portalCommand('say','غذات آماده‌ست')">🔊 غذات آماده‌ست</button></div></details></section><section class="pc-card pc-wide"><div class="pc-section-title"><h3>رویدادهای اخیر</h3><button class="pc-btn" onclick="portalCameraLoad()">تازه‌سازی</button></div><div id="pcCamEvents" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><h3>آرشیو و کلیپ‌ها</h3></div><div id="pcCamArchive" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section></div>`}
 function ai(){return head('دستیار هوشمند پت','پاسخ شخصی‌سازی‌شده با توجه به پروفایل و سوابق پت')+`<div class="pc-card"><div id="pcQuota" class="pc-muted">در حال دریافت سهمیه…</div><div id="pcChat" class="pc-chat"><div class="pc-msg bot">هر سؤالی درباره مراقبت، برنامه یا سوابق ${safe(active()?.pet?.pet_name||'پت')} داری بپرس.</div></div><form class="pc-form-grid" onsubmit="portalAsk(event)"><div class="pc-field"><textarea id="pcQuestion" required maxlength="1200" placeholder="مثلاً واکسن بعدی چه زمانی است؟"></textarea></div><button class="pc-btn primary">ارسال</button></form></div>`}
 function family(){return head('خانواده و مراقبان','دسترسی اعضای خانواده را مدیریت کن',`<button class="pc-btn primary" onclick="portalShare()">＋ افزودن مراقب</button>`)+`<div class="pc-card"><div id="pcShares" class="pc-list">در حال بارگذاری…</div></div>`}
 function profile(){const d=P.dash||{},p=d.pet?.profile||{};return head('پروفایل پت','هویت، ویژگی‌ها و اطلاعات تماس دامپزشک',`<button class="pc-btn primary" onclick="ccProfile()">ویرایش پروفایل</button>`)+`<div class="pc-grid"><section class="pc-card pc-narrow"><div class="pc-icon" style="width:72px;height:72px;font-size:34px">${active()?.pet?.pet_type==='cat'?'🐈':'🐕'}</div><h2>${safe(d.pet?.name||'پت')}</h2><p class="pc-muted">${safe(p.breed||'نژاد ثبت نشده')}</p></section><section class="pc-card pc-wide"><div class="pc-form-grid"><div><span class="pc-muted">وزن</span><b style="display:block">${p.weight_kg||'—'} کیلو</b></div><div><span class="pc-muted">تولد</span><b style="display:block">${safe(p.birth_date||'—')}</b></div><div><span class="pc-muted">دامپزشک</span><b style="display:block">${safe(p.vet_name||'—')}</b></div><div><span class="pc-muted">میکروچیپ</span><b style="display:block">${safe(p.microchip||'—')}</b></div><div><span class="pc-muted">حساسیت</span><b style="display:block">${safe(p.allergies||'—')}</b></div><div><span class="pc-muted">یادداشت پزشکی</span><b style="display:block">${safe(p.medical_notes||'—')}</b></div></div></section></div>`}
@@ -166,8 +166,163 @@ window.portalHealth=()=>ccHealth();window.portalWatch=async(auto=false)=>{
 };
 window.portalCommand=async(type,value)=>{try{const sent=await api(`/api/pet/devices/${P.active}/command`,{method:'POST',body:JSON.stringify({type,value})}),id=sent.command?.id;if(!id){toast('دستور ارسال شد');return sent}for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,450));const s=await api(`/api/pet/devices/${P.active}/commands/${id}/status`);if(s.status!=='pending'){toast(s.ack?.message||'روی دوربین اعمال شد');return s.ack}}toast('دستور ارسال شد؛ دوربین هنوز پاسخ نداده');return sent}catch(e){toast(e.message);throw e}};
 window.portalToggle=async type=>{const key=type==='torch'?'torch':'lowPower',button=q(type==='torch'?'pcTorch':'pcLow'),wanted=!P[key];button?.classList.add('busy');try{await portalCommand(type,wanted);P[key]=wanted;button?.classList.toggle('on',wanted)}finally{button?.classList.remove('busy')}};
-window.portalTalkStart=async e=>{e.preventDefault();if(P.talk)return;const b=q('pcTalk');try{b.textContent='در حال اتصال میکروفن…';await api(`/api/pet/devices/${P.active}/talk-wake`,{method:'POST'}).catch(()=>{});const auth=await api(`/api/pet/devices/${P.active}/talk-token`,{method:'POST'});P.talkStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});const p=newPeer();P.talk=p;P.talkStream.getTracks().forEach(t=>p.addTrack(t,P.talkStream));const offer=await p.createOffer();await p.setLocalDescription(offer);await waitIce(p);const r=await fetch(auth.whip_url,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},body:p.localDescription.sdp});if(!r.ok)throw new Error('ارتباط صوتی برقرار نشد');await p.setRemoteDescription({type:'answer',sdp:await r.text()});b.textContent='🎙 در حال صحبت…';b.classList.add('active')}catch(x){toast(x.message);portalTalkStop()}};
-window.portalTalkStop=()=>{P.talkStream?.getTracks().forEach(t=>t.stop());P.talkStream=null;P.talk?.close();P.talk=null;const b=q('pcTalk');if(b){b.textContent='🎙 نگه‌دار و صحبت کن';b.classList.remove('active')}};
+// ---- Portal talk lifecycle: tap to connect, tap again to disconnect.
+// A short mobile tap must not close the PeerConnection while WHIP negotiation is pending.
+function portalTalkButton(message,active=false){
+  const b=q('pcTalk');
+  if(!b)return;
+  b.textContent=message||'🎙 لمس کن و صحبت کن';
+  b.classList.toggle('active',active);
+  b.setAttribute('aria-pressed',String(active));
+}
+function portalDeleteTalkResource(url){
+  if(!url)return;
+  try{fetch(url,{method:'DELETE'}).catch(()=>{})}catch{}
+}
+function portalTalkCancelled(){
+  const error=new Error('talk-cancelled');
+  error.portalTalkCancelled=true;
+  return error;
+}
+window.portalTalkStop=()=>{
+  ++P.talkGeneration;
+  clearTimeout(P.talkTimer);
+  P.talkTimer=null;
+  const controller=P.talkAbort,peer=P.talk,stream=P.talkStream,resource=P.talkResource;
+  P.talkAbort=null;P.talk=null;P.talkStream=null;P.talkResource=null;P.talkBusy=false;
+  try{controller?.abort()}catch{}
+  try{peer?.close()}catch{}
+  try{stream?.getTracks?.().forEach(track=>track.stop())}catch{}
+  portalDeleteTalkResource(resource);
+  if(P.talkMutedBefore){
+    try{P.talkMutedBefore.video.muted=P.talkMutedBefore.muted}catch{}
+    P.talkMutedBefore=null;
+  }
+  try{window.CamCamNative?.releaseMicrophone?.()}catch{}
+  portalTalkButton();
+};
+window.portalTalkStart=async e=>{
+  e?.preventDefault();
+  if(P.talkBusy||P.talk||!P.active||P.page!=='camera'||active()?.access==='viewer')return;
+  const deviceId=P.active,generation=++P.talkGeneration;
+  P.talkBusy=true;
+  let localStream=null,localPeer=null,localResource=null;
+  const current=()=>P.talkGeneration===generation&&P.active===deviceId&&P.page==='camera';
+  const ensure=()=>{if(!current())throw portalTalkCancelled()};
+  portalTalkButton('در حال آماده‌سازی میکروفن…',true);
+  try{
+    if(typeof ensureNativeMic==='function'&&!await ensureNativeMic())
+      throw new Error('اجازه دسترسی به میکروفن داده نشد');
+    ensure();
+    localStream=typeof getMic==='function'
+      ?await getMic()
+      :await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    ensure();
+    P.talkStream=localStream;
+    const video=q('liveVideo');
+    if(video){
+      P.talkMutedBefore={video,muted:video.muted};
+      video.muted=true;
+    }
+    await api('/api/pet/devices/'+deviceId+'/talk-wake',{method:'POST'}).catch(()=>{});
+    ensure();
+    const auth=await api('/api/pet/devices/'+deviceId+'/talk-token',{method:'POST'});
+    ensure();
+    const peer=newPeer();
+    localPeer=peer;P.talk=peer;
+    localStream.getAudioTracks().forEach(track=>peer.addTrack(track,localStream));
+    const offer=await peer.createOffer();
+    ensure();
+    await peer.setLocalDescription(offer);
+    await waitIce(peer);
+    ensure();
+    if(peer.signalingState==='closed')throw portalTalkCancelled();
+    const controller=new AbortController();
+    P.talkAbort=controller;
+    let response;
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    try{
+      response=await fetch(auth.whip_url,{
+        method:'POST',
+        headers:{'Content-Type':'application/sdp','Authorization':'Bearer '+auth.token},
+        body:peer.localDescription.sdp,signal:controller.signal
+      });
+    }finally{
+      clearTimeout(timeout);
+      if(P.talkAbort===controller)P.talkAbort=null;
+    }
+    localResource=response.headers.get('Location');
+    ensure();
+    if(peer.signalingState==='closed')throw portalTalkCancelled();
+    if(!response.ok)throw new Error('مسیر صحبت برقرار نشد ('+response.status+')');
+    P.talkResource=localResource;
+    const answer=await response.text();
+    ensure();
+    if(peer.signalingState==='closed')throw portalTalkCancelled();
+    try{await peer.setRemoteDescription({type:'answer',sdp:answer})}
+    catch(error){
+      if(peer.signalingState==='closed'||!current())throw portalTalkCancelled();
+      throw error;
+    }
+    ensure();
+    portalTalkButton('در حال اتصال صوت…',true);
+    const onConnection=()=>{
+      if(!current()||P.talk!==peer)return;
+      const state=peer.connectionState;
+      if(state==='connected'){
+        clearTimeout(P.talkTimer);P.talkTimer=null;
+        portalTalkButton('🎙 در حال صحبت · برای توقف لمس کن',true);
+      }else if(state==='failed'||state==='closed'){
+        toast('ارتباط صوتی قطع شد؛ دوباره تلاش کن.');
+        window.portalTalkStop();
+      }else if(state==='disconnected'){
+        clearTimeout(P.talkTimer);
+        P.talkTimer=setTimeout(()=>{
+          if(current()&&P.talk===peer&&peer.connectionState==='disconnected'){
+            toast('ارتباط صوتی قطع شد؛ دوباره تلاش کن.');
+            window.portalTalkStop();
+          }
+        },4500);
+      }
+    };
+    peer.onconnectionstatechange=onConnection;
+    P.talkTimer=setTimeout(()=>{
+      if(current()&&P.talk===peer&&peer.connectionState!=='connected'){
+        toast('اتصال صدا کامل نشد؛ دوباره تلاش کن.');
+        window.portalTalkStop();
+      }
+    },15000);
+    onConnection();
+  }catch(error){
+    const cancelled=error?.portalTalkCancelled||!current()||
+      (error?.name==='InvalidStateError'&&localPeer?.signalingState==='closed');
+    if(!cancelled){
+      const raw=String(error?.message||error||'خطای نامشخص');
+      const message=/audio source|notreadableerror|منبع صوتی اندروید/i.test(raw)
+        ?'میکروفن گوشی باز نشد؛ دسترسی میکروفن را بررسی کن.'
+        :error?.name==='AbortError'
+          ?'ارتباط صوتی به‌موقع برقرار نشد؛ دوباره تلاش کن.'
+          :'صدا متصل نشد: '+raw;
+      toast(message);
+    }
+    if(current())window.portalTalkStop();
+  }finally{
+    if(localStream&&localStream!==P.talkStream)
+      try{localStream.getTracks().forEach(track=>track.stop())}catch{}
+    if(localPeer&&localPeer!==P.talk)try{localPeer.close()}catch{}
+    if(localResource&&localResource!==P.talkResource)portalDeleteTalkResource(localResource);
+    if(current())P.talkBusy=false;
+  }
+};
+window.portalTalkToggle=e=>{
+  e?.preventDefault();
+  if(P.talkBusy||P.talk){window.portalTalkStop();return}
+  return window.portalTalkStart(e);
+};
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&(P.talkBusy||P.talk))window.portalTalkStop();
+});
+window.addEventListener('pagehide',()=>window.portalTalkStop());
 window.portalManual=async()=>{const b=q('pcManual');try{if(!P.manual){P.manual=await api(`/api/pet/devices/${P.active}/manual-recordings/start`,{method:'POST'});b.textContent='⏹ پایان و ذخیره';b.classList.add('active');toast('ضبط دستی شروع شد')}else{await api(`/api/pet/devices/${P.active}/manual-recordings/${P.manual.id}/stop`,{method:'POST'});P.manual=null;b.textContent='⏺ ضبط دستی';b.classList.remove('active');toast('کلیپ ذخیره شد');portalCameraLoad()}}catch(e){toast(e.message)}};
 window.portalRefreshCamera=async()=>{await portalCameraLoad();toast('وضعیت به‌روز شد')};
 window.portalCameraLoad=async()=>{if(!P.active)return;try{const [health,events,archive,manual,caps]=await Promise.all([api(`/api/pet/devices/${P.active}/health`),api(`/api/pet/devices/${P.active}/events`),api(`/api/pet/devices/${P.active}/recordings`),api(`/api/pet/devices/${P.active}/manual-recordings`),api(`/api/pet/devices/${P.active}/capabilities`)]);const t=health.telemetry||{};P.torch=!!t.torch;P.lowPower=!!t.low_power;q('pcTorch')?.classList.toggle('on',P.torch);q('pcLow')?.classList.toggle('on',P.lowPower);if(q('pcBattery'))q('pcBattery').textContent=t.battery!=null?`🔋 ${fa(t.battery)}٪`:'—';if(q('pcZoom')&&t.zoom){q('pcZoom').value=t.zoom;q('pcZoomValue').textContent=Number(t.zoom).toFixed(1)+'×'}if(q('pcQuality')&&t.quality)q('pcQuality').value=t.quality;const hide=(id,no)=>{const el=q(id);if(el)el.style.display=no?'none':''};hide('pcTorch',caps.torch_supported===false);hide('pcTalk',caps.talk_supported===false);const visibleEvents=events.filter(x=>x.kind!=='control_ack').slice(0,6);if(q('pcCamEvents'))q('pcCamEvents').innerHTML=visibleEvents.map(x=>`<div class="pc-item"><div class="pc-icon">${x.kind==='motion'?'◉':'🔔'}</div><div class="pc-grow"><b>${safe(x.kind==='motion'?'حرکت':x.kind==='sound'?'صدا':x.kind)}</b><small>${date(x.created_at)}</small></div>${x.highlight_url?`<button class="pc-btn" onclick="playMedia('${safe(x.highlight_url)}','رویداد')">پخش</button>`:''}</div>`).join('')||'<div class="pc-empty">رویدادی ثبت نشده.</div>';const clips=[...manual.filter(x=>x.ended_at).map(x=>({...x,manual:true})),...archive].slice(0,6);if(q('pcCamArchive'))q('pcCamArchive').innerHTML=clips.map(x=>`<div class="pc-item"><div class="pc-icon">▣</div><div class="pc-grow"><b>${x.manual?'کلیپ دستی':'آرشیو'}</b><small>${date(x.created_at||x.started_at)}</small></div><button class="pc-btn" onclick="playMedia('${safe(x.url)}','کلیپ')">پخش</button></div>`).join('')||'<div class="pc-empty">هنوز کلیپی ذخیره نشده.</div>'}catch(e){if(q('pcCamState'))q('pcCamState').textContent=e.message}};
