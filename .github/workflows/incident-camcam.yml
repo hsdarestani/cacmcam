@@ -1,0 +1,45 @@
+name: CamCam DB Incident Read-Only Diagnostics
+on:
+  push:
+    branches:
+      - ops/camcam-incident-20261111
+    paths:
+      - .github/workflows/incident-camcam.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect isolated CamCam production services (no writes)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 143.20.60.195
+          port: 9011
+          username: root
+          password: ${{ secrets.SHARED_VPS_PASS || secrets.PASS }}
+          command_timeout: 5m
+          script: |
+            set -u
+            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) echo WRONG_HOST; exit 1;; esac
+            echo "=== TIME ==="; date -u
+            echo "=== UPTIME ==="; uptime
+            echo "=== ROOT DISK ==="; df -h /; df -i /
+            echo "=== MEMORY ==="; free -m
+            echo "=== CAMCAM SERVICE STATE ==="
+            docker ps -a --filter name=camcam-shared --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+            for role in db api pet; do
+              name="camcam-shared-$role-1"
+              echo "=== $role health and restarts ==="
+              docker inspect -f 'state={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart_count={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' "$name" 2>&1 || true
+            done
+            echo "=== DB READINESS ==="
+            docker exec camcam-shared-db-1 pg_isready -U camcam -d camcam 2>&1 || true
+            echo "=== POSTGRES ERRORS FROM LAST 2H ==="
+            docker logs --since 2h camcam-shared-db-1 2>&1 | grep -iE 'FATAL|PANIC|ERROR|recovery|checkpoint|redo|disk|space|shutdown|database system|out of memory|terminated' | tail -n 90 || true
+            echo "=== API ERRORS FROM LAST 1H ==="
+            docker logs --since 1h camcam-shared-api-1 2>&1 | grep -iE 'Traceback|OperationalError|connection refused|recovery mode|database|500 Internal|unable to|FATAL' | tail -n 50 || true
+            echo "=== LOCAL API HEALTH ==="
+            curl --max-time 5 -s -o /dev/null -w 'http_status=%{http_code}\n' http://127.0.0.1:8117/health || true
