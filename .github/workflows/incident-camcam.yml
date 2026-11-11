@@ -1,4 +1,4 @@
-name: CamCam DB Incident Read-Only Diagnostics
+name: CamCam Disk Usage and Recording Retention Diagnosis
 on:
   push:
     branches:
@@ -25,6 +25,12 @@ jobs:
             set -u
             case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) echo WRONG_HOST; exit 1;; esac
             echo "=== TIME ==="; date -u
+            echo "=== ROOT TOP DIRS ==="; du -xhm --max-depth=1 /var /opt /root /tmp 2>/dev/null | sort -rn | head -n 35
+            echo "=== DOCKER USAGE ==="; docker system df 2>&1 || true
+            echo "=== CAMCAM RECORDINGS LOCATION ==="; docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1
+            echo "=== CAMCAM RECORDINGS SUBDIRS ==="; docker exec camcam-shared-mediamtx-1 sh -c 'du -h -d 2 /recordings 2>/dev/null | sort -rh | head -n 25' || true
+            echo "=== ARCHIVE CANDIDATES OLDER 12H ==="; docker exec camcam-shared-mediamtx-1 sh -c 'find /recordings/cam -type f -mmin +720 2>/dev/null | awk "END {print NR}"' || true
+            echo "=== CAMCAM PROJECT SIZES ==="; du -hm --max-depth=1 /opt/camcam 2>/dev/null | sort -rn | head -n 18
             echo "=== UPTIME ==="; uptime
             echo "=== ROOT DISK ==="; df -h /; df -i /
             echo "=== MEMORY ==="; free -m
