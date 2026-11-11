@@ -84,6 +84,15 @@ jobs:
             previous_image=$(docker inspect -f '{{.Image}}' camcam-shared-api-1)
             git fetch origin main
             changed=$(git diff --name-only "$previous" origin/main -- backend Dockerfile requirements.txt | wc -l)
+            # Incident repair already set MediaMTX to 12h in the live worktree.
+            # Stage ONLY that exact incoming config so checkout does not abort
+            # on a known benign local change; refuse unexpected edits.
+            if ! git diff --quiet -- mediamtx.yml; then
+              actual_config_sha=$(sha256sum mediamtx.yml | awk '{print $1}')
+              incoming_config_sha=$(git show origin/main:mediamtx.yml | sha256sum | awk '{print $1}')
+              [ "$actual_config_sha" = "$incoming_config_sha" ] || { echo "Unexpected MediaMTX config drift"; exit 1; }
+              git add mediamtx.yml
+            fi
             git checkout --detach origin/main
             docker compose -p camcam-shared -f docker-compose.yml -f docker-compose.shared-vps.yml config --quiet
             rollback() {
