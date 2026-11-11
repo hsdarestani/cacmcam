@@ -1,51 +1,36 @@
-name: CamCam Disk Usage and Recording Retention Diagnosis
+name: CamCam Targeted Recording Inspection
 on:
   push:
-    branches:
-      - ops/camcam-incident-20261111
-    paths:
-      - .github/workflows/incident-camcam.yml
+    branches: [ops/camcam-incident-20261111]
+    paths: [.github/workflows/incident-camcam.yml]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
-      - name: Inspect isolated CamCam production services (no writes)
+      - name: Check mounted camera archive and host disk without writes
         uses: appleboy/ssh-action@v1
         with:
           host: 143.20.60.195
           port: 9011
           username: root
           password: ${{ secrets.SHARED_VPS_PASS || secrets.PASS }}
-          command_timeout: 5m
+          command_timeout: 2m
           script: |
-            set -u
-            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) echo WRONG_HOST; exit 1;; esac
-            echo "=== TIME ==="; date -u
-            echo "=== ROOT TOP DIRS ==="; du -xhm --max-depth=1 /var /opt /root /tmp 2>/dev/null | sort -rn | head -n 35
-            echo "=== DOCKER USAGE ==="; docker system df 2>&1 || true
-            echo "=== CAMCAM RECORDINGS LOCATION ==="; docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1
-            echo "=== CAMCAM RECORDINGS SUBDIRS ==="; docker exec camcam-shared-mediamtx-1 sh -c 'du -h -d 2 /recordings 2>/dev/null | sort -rh | head -n 25' || true
-            echo "=== ARCHIVE CANDIDATES OLDER 12H ==="; docker exec camcam-shared-mediamtx-1 sh -c 'find /recordings/cam -type f -mmin +720 2>/dev/null | awk "END {print NR}"' || true
-            echo "=== CAMCAM PROJECT SIZES ==="; du -hm --max-depth=1 /opt/camcam 2>/dev/null | sort -rn | head -n 18
-            echo "=== UPTIME ==="; uptime
-            echo "=== ROOT DISK ==="; df -h /; df -i /
-            echo "=== MEMORY ==="; free -m
-            echo "=== CAMCAM SERVICE STATE ==="
-            docker ps -a --filter name=camcam-shared --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
-            for role in db api pet; do
-              name="camcam-shared-$role-1"
-              echo "=== $role health and restarts ==="
-              docker inspect -f 'state={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart_count={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' "$name" 2>&1 || true
-            done
-            echo "=== DB READINESS ==="
-            docker exec camcam-shared-db-1 pg_isready -U camcam -d camcam 2>&1 || true
-            echo "=== POSTGRES ERRORS FROM LAST 2H ==="
-            docker logs --since 2h camcam-shared-db-1 2>&1 | grep -iE 'FATAL|PANIC|ERROR|recovery|checkpoint|redo|disk|space|shutdown|database system|out of memory|terminated' | tail -n 90 || true
-            echo "=== API ERRORS FROM LAST 1H ==="
-            docker logs --since 1h camcam-shared-api-1 2>&1 | grep -iE 'Traceback|OperationalError|connection refused|recovery mode|database|500 Internal|unable to|FATAL' | tail -n 50 || true
-            echo "=== LOCAL API HEALTH ==="
-            curl --max-time 5 -s -o /dev/null -w 'http_status=%{http_code}\n' http://127.0.0.1:8117/health || true
+            set -eu
+            case " $(hostname -I) " in *" 143.20.60.195 "*) : ;; *) exit 1;; esac
+            echo "=== ARCHIVE MOUNT ==="
+            docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Type}}|{{.Name}}|{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1
+            src=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/recordings"}}{{.Source}}{{end}}{{end}}' camcam-shared-mediamtx-1)
+            if [ -d "$src/cam" ]; then
+              du -sh "$src" "$src/cam" || true
+              echo "=== OLD FILE COUNT ==="
+              find "$src/cam" -xdev -type f -mmin +720 -printf '.' | wc -c
+              echo "=== MOST RECENT SEGMENTS ==="
+              find "$src/cam" -xdev -type f -printf '%TY-%Tm-%Td %TH:%TM %s %p\n' | sort -r | head -n 5 || true
+            fi
+            echo "=== CAMCAM BACKUPS ==="; du -sh /opt/camcam/.deployment-backup-* 2>/dev/null | tail -n 10 || true
+            echo "=== HOST USE ==="; df -h /
