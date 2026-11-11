@@ -41,7 +41,7 @@ paths:
     # One-minute segments make new archive entries visible quickly while keeping
     # continuous recording, so event highlights can include seconds before motion.
     recordSegmentDuration: 1m
-    recordDeleteAfter: 31d
+    recordDeleteAfter: 12h
 
   "~^talk/.+$":
     source: publisher
