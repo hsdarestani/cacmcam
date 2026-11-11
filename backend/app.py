@@ -344,7 +344,7 @@ PLAN_MAP = {
 
 def public_plans() -> list[dict]:
     return [
-        {'code': 'premium_monthly', 'name': 'Premium', 'cycle': 'monthly', 'amount_rial': settings.premium_monthly_rial, 'cameras': 10, 'retention_days': 30, 'all_features': True, 'trial_days': 7},
+        {'code': 'premium_monthly', 'name': 'Premium', 'cycle': 'monthly', 'amount_rial': settings.premium_monthly_rial, 'cameras': 10, 'retention_days': 0.5, 'all_features': True, 'trial_days': 7},
     ]
 
 
