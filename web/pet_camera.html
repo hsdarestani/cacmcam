@@ -7,11 +7,40 @@
 const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));let creds=null,pc=null,raw=null,out=null,talkPc=null,wake=null,starting=false,manualStop=false,facing='environment',lowPower=false,torch=false,zoom=1,digitalZoom=1,drawTimer=null,cmdTimer=null,hbTimer=null,motionTimer=null,soundTimer=null,telTimer=null,retryTimer=null,talkRetry=null,talkStarting=false,wakeLoop=false,audioCtx=null,analyser=null,lastFrame=null,motionHits=0,lastMotion=0,lastSound=0,soundHits=0,settings={quality:'720p',motion_sensitivity:'normal',sound_enabled:true,sound_threshold:24,pet_name:'',low_power_default:false};
 function stored(){try{return JSON.parse(localStorage.getItem('camcam_device')||'null')}catch{return null}}function hdr(){return{'X-Device-ID':creds.id,'X-Device-Token':creds.token}}async function req(url,opt={}){let r=await fetch(url,{headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt}),d={};try{d=await r.json()}catch{}if(!r.ok){let e=new Error(d.detail||'خطای ارتباط ('+r.status+')');e.status=r.status;throw e}return d}function newPeer(){return new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]})}function waitIce(p){return p.iceGatheringState==='complete'?Promise.resolve():new Promise(ok=>{let t=setTimeout(ok,3500);p.addEventListener('icegatheringstatechange',()=>{if(p.iceGatheringState==='complete'){clearTimeout(t);ok()}},{once:true})})}function badge(t,k=''){$('badge').textContent=t;$('badge').className='badge '+k}function dims(){return settings.quality==='1080p'?[1920,1080]:settings.quality==='360p'?[640,360]:[1280,720]}function states(){$('qualityState').textContent=settings.quality;$('zoomState').textContent=zoom.toFixed(1)+'×';$('torchState').textContent=torch?'روشن':'خاموش'}
 function ui(){creds=stored();$('pair').classList.toggle('hidden',!!creds);$('cam').classList.toggle('hidden',!creds)}async function pairNow(){try{let code=$('code').value.replace(/\D/g,'');if(code.length<6)throw new Error('کد را کامل وارد کن');let d=await req('/api/pair',{method:'POST',body:JSON.stringify({code})});creds={id:d.device_id,name:d.name,token:d.device_token,whip:d.whip_url};localStorage.setItem('camcam_device',JSON.stringify(creds));ui();await loadSettings();await startCamera(true,false)}catch(e){$('pairErr').textContent=e.message}}async function loadSettings(){settings=await req('/api/pet/device/settings',{headers:hdr()});states()}
-async function getMedia(force=false){if(raw&&!force&&raw.getVideoTracks()[0]?.readyState==='live')return;if(raw)raw.getTracks().forEach(t=>t.stop());const[w,h]=dims();raw=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:w},height:{ideal:h},frameRate:{ideal:20,max:24}},audio:false});try{let a=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});a.getAudioTracks().forEach(t=>raw.addTrack(t))}catch{}$('preview').srcObject=raw;await $('preview').play().catch(()=>{});prepareOutput();setupSound()}
+async function getMedia(force=false){
+  if(raw&&!force&&raw.getVideoTracks()[0]?.readyState==='live'&&raw.getAudioTracks()[0]?.readyState==='live')return;
+  if(raw)raw.getTracks().forEach(t=>t.stop());
+  const[w,h]=dims();
+  raw=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:w},height:{ideal:h},frameRate:{ideal:20,max:24}},audio:false});
+  let lastMicError=null;
+  for(const audio of [
+    {echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+    true
+  ]){
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio,video:false});
+      const tracks=stream.getAudioTracks();
+      if(tracks.length&&tracks.some(t=>t.readyState==='live')){
+        tracks.forEach(track=>raw.addTrack(track));
+        lastMicError=null;
+        break;
+      }
+      stream.getTracks().forEach(t=>t.stop());
+    }catch(error){lastMicError=error}
+  }
+  window.camcamMicError=lastMicError;
+  if(!raw.getAudioTracks().some(t=>t.readyState==='live')){
+    console.warn('CamCam camera microphone unavailable',lastMicError?.name||'no live audio track');
+    $('status').textContent='تصویر آماده است، اما میکروفن این گوشی باز نشد. دسترسی Microphone را بررسی کن.';
+  }
+  $('preview').srcObject=raw;
+  await $('preview').play().catch(()=>{});
+  prepareOutput();setupSound();
+}
 function prepareOutput(){clearInterval(drawTimer);let v=$('preview'),c=$('sendCanvas'),[w,h]=dims();c.width=Math.min(w,v.videoWidth||w);c.height=Math.min(h,v.videoHeight||h);if(c.captureStream){let draw=()=>{if(!v.videoWidth)return;let z=Math.max(1,digitalZoom),sw=v.videoWidth/z,sh=v.videoHeight/z,sx=(v.videoWidth-sw)/2,sy=(v.videoHeight-sh)/2;c.getContext('2d').drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)};draw();let cs=c.captureStream(20);out=new MediaStream();cs.getVideoTracks().forEach(t=>out.addTrack(t));raw.getAudioTracks().forEach(t=>out.addTrack(t));drawTimer=setInterval(draw,50)}else out=raw}
 function preferH264(p){try{let caps=RTCRtpSender.getCapabilities('video'),h=(caps?.codecs||[]).filter(c=>(c.mimeType||'').toLowerCase()==='video/h264'),o=(caps?.codecs||[]).filter(c=>(c.mimeType||'').toLowerCase()!=='video/h264'),tx=p.getTransceivers().find(x=>x.sender?.track?.kind==='video');if(h.length&&tx?.setCodecPreferences)tx.setCodecPreferences([...h,...o])}catch{}}
 async function publish(){if(pc)pc.close();let p=newPeer();pc=p;(out||raw).getTracks().forEach(t=>p.addTrack(t,out||raw));preferH264(p);let offer=await p.createOffer();await p.setLocalDescription(offer);await waitIce(p);let r=await fetch(creds.whip,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':'Basic '+btoa(creds.id+':'+creds.token)},body:p.localDescription.sdp});if(!r.ok)throw new Error('استریم برقرار نشد ('+r.status+')');await p.setRemoteDescription({type:'answer',sdp:await r.text()});await new Promise((ok,no)=>{if(p.connectionState==='connected')return ok();let t=setTimeout(()=>no(new Error('اتصال تصویر کامل نشد')),12000);p.onconnectionstatechange=()=>{if(p.connectionState==='connected'){clearTimeout(t);ok()}else if(p.connectionState==='failed'){clearTimeout(t);no(new Error('اتصال تصویر شکست خورد'))}}});return p}
-async function startCamera(force=false,reload=true){if(starting||!creds)return;starting=true;manualStop=false;clearTimeout(retryTimer);try{badge('در حال اتصال');if(reload)await loadSettings();await getMedia(force);await publish();badge('● زنده','ok');$('status').textContent='تصویر زنده در حال ارسال است.';startLoops();inspectCodec();try{window.CamCamNative?.setCameraActive(true)}catch{}}catch(e){badge('بازیابی','err');$('status').textContent=e.message;retryTimer=setTimeout(()=>startCamera(false,true),3000)}finally{starting=false}}
+async function startCamera(force=false,reload=true){if(starting||!creds)return;starting=true;manualStop=false;clearTimeout(retryTimer);try{badge('در حال اتصال');if(reload)await loadSettings();await getMedia(force);await publish();badge('● زنده','ok');$('status').textContent=raw?.getAudioTracks?.().some(t=>t.readyState==='live')?'تصویر و صدای زنده در حال ارسال است.':'تصویر زنده است، اما میکروفن فعال نیست. اجازه دسترسی Microphone را بررسی کن.';startLoops();inspectCodec();try{window.CamCamNative?.setCameraActive(true)}catch{}}catch(e){badge('بازیابی','err');$('status').textContent=e.message;retryTimer=setTimeout(()=>startCamera(false,true),3000)}finally{starting=false}}
 function startLoops(){clearInterval(hbTimer);hbTimer=setInterval(()=>req('/api/device/heartbeat',{method:'POST',headers:hdr()}).catch(()=>{}),15000);startCommands();startMotion();startTelemetry();startTalkWake()}
 function snap(){try{let c=$('snapCanvas'),src=$('sendCanvas').width?$('sendCanvas'):$('preview');c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.55)}catch{return null}}async function event(kind,confidence,metadata={},shot=true){try{return await req('/api/pet/device/event',{method:'POST',headers:hdr(),body:JSON.stringify({kind,confidence,metadata,snapshot_data_url:shot?snap():null})})}catch{}}async function ack(c,ok,message,extra={}){await event('control_ack',ok?100:0,{command_id:c.id,type:c.type,value:c.value,ok,message,...extra},false)}
 function sensitivity(){return settings.motion_sensitivity==='high'?{r:.01,a:2}:settings.motion_sensitivity==='low'?{r:.055,a:5}:{r:.022,a:3}}function startMotion(){clearInterval(motionTimer);lastFrame=null;motionTimer=setInterval(()=>{if(!pc||pc.connectionState!=='connected'||!$('preview').videoWidth)return;let c=$('motionCanvas'),x=c.getContext('2d',{willReadFrequently:true});x.drawImage($('preview'),0,0,c.width,c.height);let d=x.getImageData(0,0,c.width,c.height).data,n=[],changed=0,delta=0,j=0;for(let i=0;i<d.length;i+=16){let l=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)|0;n.push(l);if(lastFrame){let q=Math.abs(l-lastFrame[j]);delta+=q;if(q>24)changed++}j++}if(lastFrame){let r=changed/j,a=delta/j,t=sensitivity();$('motionState').textContent=(r*100).toFixed(1)+'٪';motionHits=r>t.r&&a>t.a?motionHits+1:Math.max(0,motionHits-1);if(motionHits>=2&&Date.now()-lastMotion>8000){motionHits=0;lastMotion=Date.now();event('motion',Math.min(100,Math.round(r*900+a*2)),{ratio:r,avg:a})}}lastFrame=n},800)}
@@ -35,7 +64,7 @@ async function startTalk(){
     p=newPeer();talkPc=p;
     p.addTransceiver('audio',{direction:'recvonly'});
     let m=new MediaStream();
-    p.ontrack=e=>{if(talkPc!==p)return;m.addTrack(e.track);$('talkAudio').srcObject=m;$('talkAudio').play().catch(()=>{});$('talkState').textContent='در حال پخش'};
+    p.ontrack=e=>{if(talkPc!==p)return;m.addTrack(e.track);$('talkAudio').srcObject=m;const audio=$('talkAudio');audio.muted=false;audio.volume=1;audio.play().then(()=>{$('talkState').textContent='در حال پخش'}).catch(error=>{$('talkState').textContent='پخش صدای دریافتی مسدود شد';console.warn('CamCam talk receiver playback',error)})};
     let o=await p.createOffer();await p.setLocalDescription(o);await waitIce(p);
     controller=new AbortController();timeout=setTimeout(()=>controller.abort(),8000);
     let r=await fetch(`/webrtc/talk/${creds.id}/whep`,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':'Basic '+btoa(creds.id+':'+creds.token)},body:p.localDescription.sdp,signal:controller.signal});
