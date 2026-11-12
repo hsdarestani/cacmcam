@@ -20,7 +20,7 @@ function harness(){
   const P={active:'device1',page:'camera',talk:null,talkStream:null,
     talkBusy:false,talkGeneration:0,talkAbort:null,talkResource:null,
     talkTimer:null,talkMutedBefore:null};
-  const peers=[],streams=[],toasts=[],deleted=[];
+  const peers=[],streams=[],toasts=[],deleted=[],wakes=[];
   let resolveWhip;
   const video={muted:false};
   const button={textContent:'',attributes:{},classList:{toggle(_,active){button.active=active}},
@@ -36,8 +36,11 @@ function harness(){
       const stream={getAudioTracks:()=>[track],getTracks:()=>[track]};
       streams.push(stream);return stream;
     },
-    api:async path=>path.endsWith('/talk-token')
-      ?{whip_url:'/webrtc/talk/device1/whip',token:'test'}:{},
+    api:async path=>{
+      if(path.endsWith('/talk-wake'))wakes.push(path);
+      return path.endsWith('/talk-token')
+        ?{whip_url:'/webrtc/talk/device1/whip',token:'test'}:{};
+    },
     waitIce:async()=>{},
     newPeer:()=>{
       const peer={signalingState:'stable',connectionState:'connecting',remoteCalls:0,
@@ -66,7 +69,7 @@ function harness(){
   context.window=context;
   context.addEventListener=()=>{};
   vm.runInContext(talkCode,context,{filename:'portal_talk_lifecycle_test.js'});
-  return{context,P,peers,streams,toasts,deleted,button,video,
+  return{context,P,peers,streams,toasts,deleted,wakes,button,video,
     signalReady:()=>typeof resolveWhip==='function',
     answer:()=>resolveWhip()};
 }
@@ -80,6 +83,7 @@ function harness(){
   await pending;
   assert.equal(cancelled.peers[0].remoteCalls,0,'no remote description on a closed peer');
   assert.equal(cancelled.toasts.length,0,'intentional cancellation must stay silent');
+  assert.equal(cancelled.wakes.length,0,'cancelled negotiation must not wake the remote receiver');
   assert.equal(cancelled.P.talk,null);
   assert.equal(cancelled.streams[0].getTracks()[0].stopped,true);
   assert.equal(cancelled.video.muted,false);
@@ -92,9 +96,12 @@ function harness(){
   await negotiating;
   assert.equal(connected.peers[0].remoteCalls,1);
   assert.equal(connected.P.talk,connected.peers[0]);
+  await until(()=>connected.wakes.length===1);
+  await tick();
   assert.match(connected.button.textContent,/در حال صحبت/);
+  assert.equal(connected.wakes.length,1,'wake receiver only after WHIP is connected');
   assert.equal(connected.button.attributes['aria-pressed'],'true');
-  assert.equal(connected.video.muted,true);
+  assert.equal(connected.video.muted,false,'talk must not mute incoming remote audio');
   connected.context.portalTalkToggle({preventDefault(){}});
   assert.equal(connected.P.talk,null);
   assert.equal(connected.peers[0].signalingState,'closed');
@@ -113,5 +120,7 @@ function harness(){
   assert.equal(switched.peers[0].remoteCalls,0);
   assert.equal(switched.toasts.length,0);
   assert.equal(switched.P.talk,null);
+  assert.equal(switched.wakes.length,0,'switching away before WHIP answer must not wake old device');
+  assert.match(source,/portalEnableAudio/,'viewer must offer a user-gesture audio unlock');
   console.log('CamCam Care portal talk lifecycle regressions passed');
 })().catch(error=>{console.error(error);process.exitCode=1});
