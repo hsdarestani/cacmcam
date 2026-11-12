@@ -43,7 +43,20 @@ async function portalConnectWatch(auth,generation,deviceId){
     p.ontrack=e=>{
       if(generation!==P.watchGeneration||P.active!==deviceId||P.page!=='camera')return;
       if(!media.getTracks().some(t=>t.id===e.track.id))media.addTrack(e.track);
-      const v=q('liveVideo');if(v){v.srcObject=media;v.play().catch(()=>{})}
+      const v=q('liveVideo');if(v){
+        v.srcObject=media;
+        if(e.track.kind==='audio'){
+          const button=q('pcAudio');
+          if(button)button.textContent='🔊 پخش صدای زنده';
+          if(q('pcCamState'))q('pcCamState').textContent='● تصویر و مسیر صدا برقرار است';
+        }
+        v.play().catch(error=>{
+          if(error?.name==='NotAllowedError'){
+            const button=q('pcAudio');
+            if(button)button.textContent='🔊 لمس کن تا صدا فعال شود';
+          }else console.warn('CamCam live playback failed',error);
+        });
+      }
     };
     const offer=await p.createOffer();ensure();
     await p.setLocalDescription(offer);await waitIce(p);ensure();
@@ -95,7 +108,7 @@ function mediaCard(x){const visual=x.media_type==='video'?`<video src="${safe(x.
 function gallery(){const visible=P.galleryFilter==='all'?P.gallery:P.gallery.filter(x=>x.category===P.galleryFilter);return head('گالری خاطرات','عکس و فیلم‌ها خودکار دسته‌بندی می‌شوند',`<button class="pc-btn primary" onclick="portalOpenUpload()">＋ افزودن عکس یا فیلم</button>`)+`<div class="pc-gallery-intro"><div><b>✦ مرتب‌سازی هوشمند</b><span>Cloudflare AI عکس‌ها را بر اساس فعالیت دسته‌بندی می‌کند؛ هر زمان خواستی می‌توانی دسته را تغییر بدهی.</span></div><strong>${fa(P.gallery.length)} خاطره</strong></div><div class="pc-tabs pc-gallery-tabs">${Object.entries(galleryLabels).map(([key,value])=>`<button class="pc-btn ${P.galleryFilter===key?'primary':''}" onclick="portalGalleryFilter('${key}')">${value}</button>`).join('')}</div>${visible.length?`<div class="pc-gallery-grid">${visible.map(mediaCard).join('')}</div>`:'<div class="pc-card pc-empty">در این دسته هنوز عکس یا ویدئویی نیست.</div>'}`}
 function health(){return head('سلامت و رشد','وزن، علائم، اشتها، آب و سابقه پزشکی',`<button class="pc-btn primary" onclick="portalHealth()">＋ ثبت سلامت</button>`)+`<div class="pc-grid"><section class="pc-card pc-full"><div class="pc-list">${P.health.map(x=>`<div class="pc-item"><div class="pc-icon">♡</div><div class="pc-grow"><b>${safe(x.value||labels[x.kind]||x.kind)}</b><small>${safe(x.note||'بدون یادداشت')} · ${date(x.happened_at)}</small></div></div>`).join('')||'<div class="pc-empty">هنوز سابقه سلامتی ثبت نشده.</div>'}</div></section></div>`}
 function medical(){const categories=['vaccination','medication','appointment','document','grooming','nutrition','reminder'];return head('پرونده و یادآورها','واکسن، دارو، نوبت، مدارک، تغذیه و نظافت',`<button class="pc-btn primary" onclick="portalAddItem()">＋ مورد جدید</button>`)+`<div class="pc-tabs">${categories.map(c=>`<button class="pc-btn" onclick="portalFilter('${c}')">${icons[c]} ${labels[c]}</button>`).join('')}</div><div class="pc-card"><div id="pcItems" class="pc-list">${P.items.filter(x=>!x.completed_at).map(itemRow).join('')||'<div class="pc-empty">موردی ثبت نشده.</div>'}</div></div>`}
-function camera(){const d=active();if(!d)return head('دوربین و ارتباط','برای شروع یک دوربین اضافه کن',`<button class="pc-btn primary" onclick="portalAddCamera()">＋ افزودن دوربین</button>`)+`<div class="pc-card pc-empty"><b>هنوز دوربینی اضافه نشده.</b><br><br><button class="pc-btn primary" onclick="portalAddCamera()">افزودن اولین دوربین</button></div>`;const owner=d.access==='owner';return head('دوربین و ارتباط','کنترل کامل، با دسترسی ساده و مرحله‌ای',`<div class="pc-actions">${owner?'<button class="pc-btn" onclick="portalPairCode()">🔗 کد اتصال</button>':''}<button class="pc-btn primary" onclick="portalAddCamera()">＋ دوربین جدید</button></div>`)+`${owner?`<section class="pc-card" style="margin-bottom:12px"><div class="pc-section-title"><div><h3>اتصال گوشی دوربین</h3><span class="pc-muted">برای وصل کردن گوشی کنار پت، یک کد ۸ رقمی یک‌بارمصرف بگیر.</span></div><button class="pc-btn primary" onclick="portalPairCode()">دریافت کد اتصال</button></div></section>`:''}<div class="pc-grid"><section class="pc-card pc-wide"><div class="pc-video-wrap"><video id="liveVideo" class="pc-video" autoplay playsinline controls></video><span id="pcCamBadge" class="pc-cam-badge">${d.online?'● آنلاین':'● آفلاین'}</span></div><div id="pcCamState" class="pc-muted" style="margin-top:8px">${d.online?'برای دیدن تصویر، پخش زنده را شروع کن':'دوربین آفلاین است'}</div><div class="pc-cam-primary"><button class="pc-btn primary" onclick="portalWatch()">▶ پخش زنده</button><button id="pcTalk" class="pc-btn gold" onclick="portalTalkToggle(event)" aria-pressed="false">🎙 لمس کن و صحبت کن</button><button id="pcManual" class="pc-btn" onclick="portalManual()">⏺ ضبط دستی</button></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><div><h3>${safe(d.pet?.pet_name||d.name)}</h3><span class="pc-muted">کنترل‌های سریع</span></div><span id="pcBattery" class="pc-cam-battery">—</span></div><div class="pc-cam-controls"><button id="pcTorch" onclick="portalToggle('torch')">🔦<span>چراغ</span></button><button onclick="portalCommand('camera','switch')">🔄<span>تعویض دوربین</span></button><button id="pcLow" onclick="portalToggle('low_power')">🌙<span>کم‌مصرف</span></button><button onclick="portalRefreshCamera()">↻<span>تازه‌سازی</span></button></div><details class="pc-advanced"><summary>کنترل‌های بیشتر</summary><div class="pc-field"><label>زوم <b id="pcZoomValue">1.0×</b></label><input id="pcZoom" type="range" min="1" max="8" step="0.1" value="1" oninput="pcZoomValue.textContent=Number(this.value).toFixed(1)+'×'" onchange="portalCommand('zoom',Number(this.value))"></div><div class="pc-field"><label>کیفیت تصویر</label><select id="pcQuality" onchange="portalCommand('quality',this.value)"><option>360p</option><option selected>720p</option><option>1080p</option></select></div><div class="pc-phrases"><button class="pc-btn" onclick="portalCommand('say','بیا پیشم')">🔊 بیا پیشم</button><button class="pc-btn" onclick="portalCommand('say','نه عزیزم')">🔊 نه عزیزم</button><button class="pc-btn" onclick="portalCommand('say','غذات آماده‌ست')">🔊 غذات آماده‌ست</button></div></details></section><section class="pc-card pc-wide"><div class="pc-section-title"><h3>رویدادهای اخیر</h3><button class="pc-btn" onclick="portalCameraLoad()">تازه‌سازی</button></div><div id="pcCamEvents" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><h3>آرشیو و کلیپ‌ها</h3></div><div id="pcCamArchive" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section></div>`}
+function camera(){const d=active();if(!d)return head('دوربین و ارتباط','برای شروع یک دوربین اضافه کن',`<button class="pc-btn primary" onclick="portalAddCamera()">＋ افزودن دوربین</button>`)+`<div class="pc-card pc-empty"><b>هنوز دوربینی اضافه نشده.</b><br><br><button class="pc-btn primary" onclick="portalAddCamera()">افزودن اولین دوربین</button></div>`;const owner=d.access==='owner';return head('دوربین و ارتباط','کنترل کامل، با دسترسی ساده و مرحله‌ای',`<div class="pc-actions">${owner?'<button class="pc-btn" onclick="portalPairCode()">🔗 کد اتصال</button>':''}<button class="pc-btn primary" onclick="portalAddCamera()">＋ دوربین جدید</button></div>`)+`${owner?`<section class="pc-card" style="margin-bottom:12px"><div class="pc-section-title"><div><h3>اتصال گوشی دوربین</h3><span class="pc-muted">برای وصل کردن گوشی کنار پت، یک کد ۸ رقمی یک‌بارمصرف بگیر.</span></div><button class="pc-btn primary" onclick="portalPairCode()">دریافت کد اتصال</button></div></section>`:''}<div class="pc-grid"><section class="pc-card pc-wide"><div class="pc-video-wrap"><video id="liveVideo" class="pc-video" autoplay playsinline controls></video><span id="pcCamBadge" class="pc-cam-badge">${d.online?'● آنلاین':'● آفلاین'}</span></div><div id="pcCamState" class="pc-muted" style="margin-top:8px">${d.online?'برای دیدن تصویر، پخش زنده را شروع کن':'دوربین آفلاین است'}</div><div class="pc-cam-primary"><button class="pc-btn primary" onclick="portalWatch()">▶ پخش زنده</button><button id="pcAudio" class="pc-btn" onclick="portalEnableAudio()">🔊 فعال کردن صدا</button><button id="pcTalk" class="pc-btn gold" onclick="portalTalkToggle(event)" aria-pressed="false">🎙 لمس کن و صحبت کن</button><button id="pcManual" class="pc-btn" onclick="portalManual()">⏺ ضبط دستی</button></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><div><h3>${safe(d.pet?.pet_name||d.name)}</h3><span class="pc-muted">کنترل‌های سریع</span></div><span id="pcBattery" class="pc-cam-battery">—</span></div><div class="pc-cam-controls"><button id="pcTorch" onclick="portalToggle('torch')">🔦<span>چراغ</span></button><button onclick="portalCommand('camera','switch')">🔄<span>تعویض دوربین</span></button><button id="pcLow" onclick="portalToggle('low_power')">🌙<span>کم‌مصرف</span></button><button onclick="portalRefreshCamera()">↻<span>تازه‌سازی</span></button></div><details class="pc-advanced"><summary>کنترل‌های بیشتر</summary><div class="pc-field"><label>زوم <b id="pcZoomValue">1.0×</b></label><input id="pcZoom" type="range" min="1" max="8" step="0.1" value="1" oninput="pcZoomValue.textContent=Number(this.value).toFixed(1)+'×'" onchange="portalCommand('zoom',Number(this.value))"></div><div class="pc-field"><label>کیفیت تصویر</label><select id="pcQuality" onchange="portalCommand('quality',this.value)"><option>360p</option><option selected>720p</option><option>1080p</option></select></div><div class="pc-phrases"><button class="pc-btn" onclick="portalCommand('say','بیا پیشم')">🔊 بیا پیشم</button><button class="pc-btn" onclick="portalCommand('say','نه عزیزم')">🔊 نه عزیزم</button><button class="pc-btn" onclick="portalCommand('say','غذات آماده‌ست')">🔊 غذات آماده‌ست</button></div></details></section><section class="pc-card pc-wide"><div class="pc-section-title"><h3>رویدادهای اخیر</h3><button class="pc-btn" onclick="portalCameraLoad()">تازه‌سازی</button></div><div id="pcCamEvents" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section><section class="pc-card pc-narrow"><div class="pc-section-title"><h3>آرشیو و کلیپ‌ها</h3></div><div id="pcCamArchive" class="pc-list"><div class="pc-empty">در حال دریافت…</div></div></section></div>`}
 function ai(){return head('دستیار هوشمند پت','پاسخ شخصی‌سازی‌شده با توجه به پروفایل و سوابق پت')+`<div class="pc-card"><div id="pcQuota" class="pc-muted">در حال دریافت سهمیه…</div><div id="pcChat" class="pc-chat"><div class="pc-msg bot">هر سؤالی درباره مراقبت، برنامه یا سوابق ${safe(active()?.pet?.pet_name||'پت')} داری بپرس.</div></div><form class="pc-form-grid" onsubmit="portalAsk(event)"><div class="pc-field"><textarea id="pcQuestion" required maxlength="1200" placeholder="مثلاً واکسن بعدی چه زمانی است؟"></textarea></div><button class="pc-btn primary">ارسال</button></form></div>`}
 function family(){return head('خانواده و مراقبان','دسترسی اعضای خانواده را مدیریت کن',`<button class="pc-btn primary" onclick="portalShare()">＋ افزودن مراقب</button>`)+`<div class="pc-card"><div id="pcShares" class="pc-list">در حال بارگذاری…</div></div>`}
 function profile(){const d=P.dash||{},p=d.pet?.profile||{};return head('پروفایل پت','هویت، ویژگی‌ها و اطلاعات تماس دامپزشک',`<button class="pc-btn primary" onclick="ccProfile()">ویرایش پروفایل</button>`)+`<div class="pc-grid"><section class="pc-card pc-narrow"><div class="pc-icon" style="width:72px;height:72px;font-size:34px">${active()?.pet?.pet_type==='cat'?'🐈':'🐕'}</div><h2>${safe(d.pet?.name||'پت')}</h2><p class="pc-muted">${safe(p.breed||'نژاد ثبت نشده')}</p></section><section class="pc-card pc-wide"><div class="pc-form-grid"><div><span class="pc-muted">وزن</span><b style="display:block">${p.weight_kg||'—'} کیلو</b></div><div><span class="pc-muted">تولد</span><b style="display:block">${safe(p.birth_date||'—')}</b></div><div><span class="pc-muted">دامپزشک</span><b style="display:block">${safe(p.vet_name||'—')}</b></div><div><span class="pc-muted">میکروچیپ</span><b style="display:block">${safe(p.microchip||'—')}</b></div><div><span class="pc-muted">حساسیت</span><b style="display:block">${safe(p.allergies||'—')}</b></div><div><span class="pc-muted">یادداشت پزشکی</span><b style="display:block">${safe(p.medical_notes||'—')}</b></div></div></section></div>`}
@@ -127,6 +140,21 @@ window.portalUploadMedia=async e=>{e.preventDefault();const file=q('pgFile').fil
 window.portalViewMedia=id=>{const x=P.gallery.find(item=>item.id===id);if(!x)return;const media=x.media_type==='video'?`<video class="pc-gallery-view" src="${safe(x.url)}" controls autoplay playsinline></video>`:`<img class="pc-gallery-view" src="${safe(x.url)}" alt="خاطره پت">`;openModal(`<button class="close" onclick="closeModal()">×</button>${media}<div class="pc-form-grid" style="margin-top:12px"><div class="pc-field"><label>دسته</label><select id="pgEditCategory">${Object.entries(galleryLabels).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}" ${x.category===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="pc-field"><label>توضیح</label><input id="pgEditCaption" maxlength="1000" value="${safe(x.caption||x.ai_caption||'')}"></div></div><div class="pc-media-actions"><button class="pc-btn primary" onclick="portalSaveMedia('${x.id}')">ذخیره تغییرات</button><button class="pc-btn danger" onclick="portalDeleteMedia('${x.id}')">حذف</button></div>${x.classified_by==='cloudflare'?'<p class="pc-muted">✦ دسته‌بندی اولیه توسط Cloudflare AI انجام شده است.</p>':''}`)};
 window.portalSaveMedia=async id=>{const updated=await api(`/api/pet/devices/${P.active}/gallery/${id}`,{method:'PUT',body:JSON.stringify({category:q('pgEditCategory').value,caption:q('pgEditCaption').value})});P.gallery=P.gallery.map(x=>x.id===id?updated:x);closeModal();render();toast('تغییرات ذخیره شد')};
 window.portalDeleteMedia=async id=>{if(!confirm('این عکس یا ویدئو از گالری حذف شود؟'))return;await api(`/api/pet/devices/${P.active}/gallery/${id}`,{method:'DELETE'});P.gallery=P.gallery.filter(x=>x.id!==id);closeModal();render();toast('از گالری حذف شد')};
+window.portalEnableAudio=async()=>{
+  const video=q('liveVideo'),button=q('pcAudio');
+  if(!video)return;
+  try{
+    video.muted=false;video.volume=1;
+    await video.play();
+    if(button)button.textContent='🔊 صدای زنده فعال است';
+    const tracks=video.srcObject?.getAudioTracks?.()||[];
+    if(!tracks.length)toast('تصویر متصل است، اما گوشی دوربین هنوز مسیر صدا ارسال نکرده است.');
+  }catch(error){
+    if(button)button.textContent='🔊 فعال کردن صدا';
+    toast('پخش صدا مجاز نشد؛ صدای رسانه را بالا ببر و دوباره این دکمه را لمس کن.');
+    console.warn('CamCam live audio unlock',error);
+  }
+};
 window.portalHealth=()=>ccHealth();window.portalWatch=async(auto=false)=>{
   if(P.watchBusy)return;
   if(!auto)P.watchWanted=true;
@@ -143,6 +171,13 @@ window.portalHealth=()=>ccHealth();window.portalWatch=async(auto=false)=>{
     if(generation!==P.watchGeneration||P.active!==id||P.page!=='camera'){try{result.pc.close()}catch{};try{result.media.getTracks().forEach(t=>t.stop())}catch{};return}
     P.watch=result.pc;P.watchMedia=result.media;
     if(state)state.textContent='● پخش زنده برقرار است';
+    setTimeout(()=>{
+      if(P.watch!==result.pc||generation!==P.watchGeneration)return;
+      if(!result.media.getAudioTracks().some(track=>track.readyState==='live')){
+        const status=q('pcCamState');
+        if(status)status.textContent='● تصویر برقرار است، اما صدای دوربین دریافت نمی‌شود';
+      }
+    },3000);
     result.pc.onconnectionstatechange=()=>{
       if(P.watch!==result.pc||generation!==P.watchGeneration||P.active!==id)return;
       const s=result.pc.connectionState;
@@ -219,13 +254,8 @@ window.portalTalkStart=async e=>{
       :await navigator.mediaDevices.getUserMedia({audio:true,video:false});
     ensure();
     P.talkStream=localStream;
-    const video=q('liveVideo');
-    if(video){
-      P.talkMutedBefore={video,muted:video.muted};
-      video.muted=true;
-    }
-    await api('/api/pet/devices/'+deviceId+'/talk-wake',{method:'POST'}).catch(()=>{});
-    ensure();
+    // Keep monitoring audio audible during talk; WebRTC echo cancellation
+    // is requested on the microphone track by getMic().
     const auth=await api('/api/pet/devices/'+deviceId+'/talk-token',{method:'POST'});
     ensure();
     const peer=newPeer();
@@ -266,12 +296,32 @@ window.portalTalkStart=async e=>{
     }
     ensure();
     portalTalkButton('در حال اتصال صوت…',true);
+    let receiverWakeStarted=false;
+    const wakeReceiver=async()=>{
+      if(receiverWakeStarted)return;
+      receiverWakeStarted=true;
+      for(let attempt=0;attempt<3;attempt++){
+        if(!current()||P.talk!==peer)return;
+        try{
+          await api('/api/pet/devices/'+deviceId+'/talk-wake',{method:'POST'});
+          if(current()&&P.talk===peer)portalTalkButton('🎙 در حال صحبت · برای توقف لمس کن',true);
+          return;
+        }catch(error){
+          if(attempt<2)await new Promise(resolve=>setTimeout(resolve,600));
+          else if(current()&&P.talk===peer){
+            toast('گوشی دوربین برای دریافت صدا بیدار نشد؛ دوباره تلاش کن.');
+            window.portalTalkStop();
+          }
+        }
+      }
+    };
     const onConnection=()=>{
       if(!current()||P.talk!==peer)return;
       const state=peer.connectionState;
       if(state==='connected'){
         clearTimeout(P.talkTimer);P.talkTimer=null;
-        portalTalkButton('🎙 در حال صحبت · برای توقف لمس کن',true);
+        portalTalkButton('در حال فعال‌سازی دریافت صدا…',true);
+        void wakeReceiver();
       }else if(state==='failed'||state==='closed'){
         toast('ارتباط صوتی قطع شد؛ دوباره تلاش کن.');
         window.portalTalkStop();
